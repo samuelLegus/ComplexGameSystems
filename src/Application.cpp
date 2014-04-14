@@ -42,6 +42,9 @@ bool Application::create(const char* a_name, int a_width, int a_height, int a_ar
 		glfwTerminate();
 		return false;
 	}
+	
+	// simply resize the GL viewport when the window size changes
+	glfwSetWindowSizeCallback(m_window, [](GLFWwindow* a_window, int a_width, int a_height){ glViewport(0,0,a_width,a_height); });
 
 	bool result = onCreate(a_argc,a_argv);
 	if (result == false)

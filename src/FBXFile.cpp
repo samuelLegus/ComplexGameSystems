@@ -12,6 +12,8 @@
 #define GLEW_NO_GLU
 #include <GL/glew.h>
 
+#include <GLFW\glfw3.h>
+
 struct ImportAssistor
 {
 	ImportAssistor() : evaluator(nullptr), loadAnimationOnly(false) {}
@@ -119,7 +121,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	lImporter->GetFileVersion(lFileMajor, lFileMinor, lFileRevision);
 
 	lScene = FbxScene::Create(lSdkManager,"root");
-
+	
 	// Import the scene.
 	lStatus = lImporter->Import(lScene);
 	lImporter->Destroy();
@@ -151,19 +153,16 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	
 	// convert the scene to OpenGL axis (right-handed Y up)
 	FbxAxisSystem::OpenGL.ConvertScene(lScene);
-
-	// DID NOT KNOW WE COULD DO THIS!!!!
-	/*
+	
 	// Convert mesh, NURBS and patch into triangle mesh
-	FbxGeometryConverter lGeomConverter(mSdkManager);
-	lGeomConverter.Triangulate(mScene, true);
-
+	FbxGeometryConverter lGeomConverter(lSdkManager);
+//	lGeomConverter.Triangulate(lScene, true);
+	
 	// Split meshes per material, so that we only have one material per mesh (for VBO support)
-	lGeomConverter.SplitMeshesPerMaterial(mScene, true);
-	*/
-
+	lGeomConverter.SplitMeshesPerMaterial(lScene, true);
+	
 	FbxNode* lNode = lScene->GetRootNode();
-
+	
 	if (lNode != nullptr)
 	{
 		// store the folder path of the scene
@@ -185,7 +184,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 
 		m_importAssistor = new ImportAssistor();
 		m_importAssistor->scene = lScene;
-		m_importAssistor->evaluator = lScene->GetEvaluator();
+		m_importAssistor->evaluator = lScene->GetAnimationEvaluator();
 		m_importAssistor->importer = lImporter;
 		m_importAssistor->loadTextures = a_loadTextures;
 		m_importAssistor->loadAnimations = a_loadAnimations;
@@ -200,7 +199,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 		m_ambientLight.y = (float)lScene->GetGlobalSettings().GetAmbientColor().mGreen;
 		m_ambientLight.z = (float)lScene->GetGlobalSettings().GetAmbientColor().mBlue;
 		m_ambientLight.w = (float)lScene->GetGlobalSettings().GetAmbientColor().mAlpha;
-
+		
 		// gather bones to create indices for them in a skeleton
 		if (a_loadAnimations == true)
 		{
@@ -260,7 +259,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	}
 
 	lSdkManager->Destroy();
-
+	
 	return true;
 }
 
@@ -370,7 +369,7 @@ bool FBXFile::loadAnimationsOnly(const char* a_filename, UNIT_SCALE a_scale /* =
 		m_importAssistor = new ImportAssistor();
 
 		m_importAssistor->scene = lScene;
-		m_importAssistor->evaluator = lScene->GetEvaluator();
+		m_importAssistor->evaluator = lScene->GetAnimationEvaluator();
 		m_importAssistor->importer = lImporter;
 		m_importAssistor->loadTextures = false;
 		m_importAssistor->loadAnimations = true;
@@ -546,7 +545,7 @@ void* FBXFile::extractMeshes(void* a_object)
 	FbxVector4* lControlPoints = fbxMesh->GetControlPoints(); 
 	FbxGeometryElementMaterial* lMaterialElement = fbxMesh->GetElementMaterial(0);
 
-	int materialCount = fbxNode->GetMaterialCount();
+	int materialCount = fbxNode->GetMaterialCount() >= 1 ? 1 : 0;
 
 	FBXMeshNode** meshes = new FBXMeshNode * [ materialCount ];
 	for ( j = 0 ; j < materialCount ; ++j )
@@ -1059,18 +1058,18 @@ void* FBXFile::extractMeshes(void* a_object)
 			}
 
 			// either add a new unique vertex or use an existing one
-			auto iter = vertexIndexMap[material].find( vertex );
-			if (iter == vertexIndexMap[material].end())
+//			auto iter = vertexIndexMap[material].find( vertex );
+	//		if (iter == vertexIndexMap[material].end())
 			{
 				// add new unique vertex
 				meshes[material]->m_vertices.push_back(vertex);
-				vertexIndexMap[material][ vertex ] = nextIndex[material]++;
-				vertexIndex[j] = nextIndex[material] - 1;
+		//		vertexIndexMap[material].insert( std::make_pair(vertex,nextIndex[material]++) );
+				vertexIndex[j] = nextIndex[material]++;// - 1;
 			}
-			else
+	/*		else
 			{
 				vertexIndex[j] = iter->second;
-			}
+			}*/
 			vertexId++;
 		}
 
@@ -1091,14 +1090,14 @@ void* FBXFile::extractMeshes(void* a_object)
 	// always build tangents/binormals as long as we have texture coordinates (saves ticking the box in maya)
 	if ((vertexAttributes & FBXVertex::TEXCOORD1) != 0)
 		vertexAttributes |= FBXVertex::TANGENT|FBXVertex::BINORMAL;
-
+	
 	// reclalc because I don't trust maya!
 	if ((vertexAttributes & (FBXVertex::TANGENT|FBXVertex::BINORMAL)) != 0)
 	{
 		for ( j = 0 ; j < materialCount ; ++j )
 			calculateTangentsBinormals(meshes[j]->m_vertices,meshes[j]->m_indices);
 	}
-
+		
 	// set mesh names, vertex attributes, extract material and add to mesh map
 	for ( j = 0 ; j < materialCount ; ++j )
 	{
@@ -1145,7 +1144,7 @@ void* FBXFile::extractMeshes(void* a_object)
 	delete[] meshes;
 	delete[] nextIndex;
 	delete[] vertexIndexMap;
-	
+		
 	return node;
 }
 

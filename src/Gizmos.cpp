@@ -27,45 +27,16 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
                      out vec4 FragColor; \
 					 void main()	{ FragColor = vColour; }";
     
-	int success = GL_FALSE;
     
 	unsigned int vs = glCreateShader(GL_VERTEX_SHADER);
 	unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
 
 	glShaderSource(vs, 1, (const char**)&vsSource, 0);
 	glCompileShader(vs);
-    
-	glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
-	if (success == GL_FALSE)
-	{
-		int infoLogLength = 0;
-		glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &infoLogLength);
-		char* infoLog = new char[infoLogLength];
-        
-		glGetShaderInfoLog(vs, infoLogLength, 0, infoLog);
-		printf("Error: Failed to compile vertex shader!\n");
-		printf("%s",infoLog);
-		printf("\n");
-		delete[] infoLog;
-	}
 
 	glShaderSource(fs, 1, (const char**)&fsSource, 0);
 	glCompileShader(fs);
-    
-	glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
-	if (success == GL_FALSE)
-	{
-		int infoLogLength = 0;
-		glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &infoLogLength);
-		char* infoLog = new char[infoLogLength];
-        
-		glGetShaderInfoLog(fs, infoLogLength, 0, infoLog);
-		printf("Error: Failed to compile fragment shader!\n");
-		printf("%s",infoLog);
-		printf("\n");
-		delete[] infoLog;
-	}
-    
+
 	m_shader = glCreateProgram();
 	glAttachShader(m_shader, vs);
 	glAttachShader(m_shader, fs);
@@ -73,6 +44,7 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
 	glBindAttribLocation(m_shader, 1, "Colour");
 	glLinkProgram(m_shader);
     
+	int success = GL_FALSE;
     glGetProgramiv(m_shader, GL_LINK_STATUS, &success);
 	if (success == GL_FALSE)
 	{
@@ -86,17 +58,18 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
 		printf("\n");
 		delete[] infoLog;
 	}
+
+	glDeleteShader(vs);
+	glDeleteShader(fs);
     
     // create VBOs
 	glGenBuffers( 1, &m_lineVBO );
 	glBindBuffer(GL_ARRAY_BUFFER, m_lineVBO);
 	glBufferData(GL_ARRAY_BUFFER, m_maxLines * sizeof(GizmoLine), m_lines, GL_DYNAMIC_DRAW);
 
-
 	glGenBuffers( 1, &m_triVBO );
 	glBindBuffer(GL_ARRAY_BUFFER, m_triVBO);
 	glBufferData(GL_ARRAY_BUFFER, m_maxTris * sizeof(GizmoTri), m_tris, GL_DYNAMIC_DRAW);
-
 
 	glGenBuffers( 1, &m_transparentTriVBO );
 	glBindBuffer(GL_ARRAY_BUFFER, m_transparentTriVBO);
@@ -144,7 +117,7 @@ Gizmos::~Gizmos()
 	glDeleteProgram(m_shader);
 }
 
-void Gizmos::create(unsigned int a_maxLines /* = 16384 */, unsigned int a_maxTris /* = 16384 */)
+void Gizmos::create(unsigned int a_maxLines /* = 0xffff */, unsigned int a_maxTris /* = 0xffff */)
 {
 	if (sm_singleton == nullptr)
 		sm_singleton = new Gizmos(a_maxLines,a_maxTris);
@@ -517,7 +490,7 @@ void Gizmos::addArcRing(const glm::vec3& a_center, float a_rotation,
 	}
 }
 
-void Gizmos::addSphere(const glm::vec3& a_center, int a_rows, int a_columns, float a_radius, const glm::vec4& a_fillColour, 
+void Gizmos::addSphere(const glm::vec3& a_center, float a_radius, int a_rows, int a_columns, const glm::vec4& a_fillColour, 
 								const glm::mat4* a_transform /*= nullptr*/, float a_longMin /*= 0.f*/, float a_longMax /*= 360*/, 
 								float a_latMin /*= -90*/, float a_latMax /*= 90*/)
 {

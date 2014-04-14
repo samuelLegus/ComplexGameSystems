@@ -135,6 +135,9 @@ private:
 	unsigned int	m_transparentTriVAO;
 	unsigned int 	m_transparentTriVBO;
 
+	// 2D
+
+
 	static Gizmos*	sm_singleton;
 };
 

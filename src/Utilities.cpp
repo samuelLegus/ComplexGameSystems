@@ -188,43 +188,23 @@ void Utility::freeMovement(glm::mat4& a_transform, float a_deltaTime, float a_sp
 {
 	GLFWwindow* window = glfwGetCurrentContext();
 
-	// Get the camera's forward, right, up, and location vectors
-	glm::vec4 vForward = a_transform[2];
-	glm::vec4 vRight = a_transform[0];
-	glm::vec4 vUp = a_transform[1];
-	glm::vec4 vTranslation = a_transform[3];
-
 	float frameSpeed = glfwGetKey(window,GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? a_deltaTime * a_speed * 2 : a_deltaTime * a_speed;	
 
-	// Translate camera
+	// translate
 	if (glfwGetKey(window,'W') == GLFW_PRESS)
-	{
-		vTranslation -= vForward * frameSpeed;
-	}
+		a_transform[3] -= a_transform[2] * frameSpeed;
 	if (glfwGetKey(window,'S') == GLFW_PRESS)
-	{
-		vTranslation += vForward * frameSpeed;
-	}
+		a_transform[3] += a_transform[2] * frameSpeed;
 	if (glfwGetKey(window,'D') == GLFW_PRESS)
-	{
-		vTranslation += vRight * frameSpeed;
-	}
+		a_transform[3] += a_transform[0] * frameSpeed;
 	if (glfwGetKey(window,'A') == GLFW_PRESS)
-	{
-		vTranslation -= vRight * frameSpeed;
-	}
+		a_transform[3] -= a_transform[0] * frameSpeed;
 	if (glfwGetKey(window,'Q') == GLFW_PRESS)
-	{
-		vTranslation += vUp * frameSpeed;
-	}
+		a_transform[3] += a_transform[1] * frameSpeed;
 	if (glfwGetKey(window,'E') == GLFW_PRESS)
-	{
-		vTranslation -= vUp * frameSpeed;
-	}
-
-	a_transform[3] = vTranslation;
-
-	// check for camera rotation
+		a_transform[3] -= a_transform[1] * frameSpeed;
+	
+	// check for rotation
 	static bool sbMouseButtonDown = false;
 	if (glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_2) == GLFW_PRESS)
 	{
@@ -251,24 +231,20 @@ void Utility::freeMovement(glm::mat4& a_transform, float a_deltaTime, float a_sp
 		// pitch
 		if (iDeltaY != 0)
 		{
-			mMat = glm::axisAngleMatrix( vRight.xyz(), (float)-iDeltaY / 150.0f );
-			vRight = mMat * vRight;
-			vUp = mMat * vUp;
-			vForward = mMat * vForward;
+			mMat = glm::axisAngleMatrix( a_transform[0].xyz(), (float)-iDeltaY / 150.0f );
+			a_transform[0] = mMat * a_transform[0];
+			a_transform[1] = mMat * a_transform[1];
+			a_transform[2] = mMat * a_transform[2];
 		}
 
 		// yaw
 		if (iDeltaX != 0)
 		{
 			mMat = glm::axisAngleMatrix( a_up, (float)-iDeltaX / 150.0f );
-			vRight = mMat * vRight;
-			vUp = mMat * vUp;
-			vForward = mMat * vForward;
+			a_transform[0] = mMat * a_transform[0];
+			a_transform[1] = mMat * a_transform[1];
+			a_transform[2] = mMat * a_transform[2];
 		}
-
-		a_transform[0] = vRight;
-		a_transform[1] = vUp;
-		a_transform[2] = vForward;
 	}
 	else
 	{
