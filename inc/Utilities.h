@@ -28,7 +28,7 @@ public:
 	static unsigned int	loadShader(const char* a_filename, unsigned int a_type);
 	
 	// loads a shader from a file and creates it for the specified stage
-	static unsigned int	createShader(const char** a_strings, unsigned int a_stringCount, unsigned int a_type);
+	static unsigned int	createShader(unsigned int a_stringCount, const char** a_strings, unsigned int a_type);
 
 	// creates a shader program, links the specified shader stages to it, and binds the specified input/output attributes if they are used
 	static unsigned int	createProgram(unsigned int a_vertexShader,

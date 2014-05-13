@@ -6,7 +6,8 @@ class Gizmos
 {
 public:
 
-	static void		create(unsigned int a_maxLines = 0xffff, unsigned int a_maxTris = 0xffff);
+	static void		create(unsigned int a_maxLines = 0xffff, unsigned int a_maxTris = 0xffff,
+						   unsigned int a_max2DLines = 0xff, unsigned int a_max2DTris = 0xff);
 	static void		destroy();
 
 	// removes all Gizmos
@@ -16,6 +17,7 @@ public:
 	static void		draw(const glm::mat4& a_projectionView);
 	static void		draw(const glm::mat4& a_projection, const glm::mat4& a_view);
 	
+	// the projection matrix here should ideally be orthographic with a near of -1 and far of 1
 	static void		draw2D(const glm::mat4& a_projection);
 
 	// Adds a single debug line
@@ -78,17 +80,16 @@ public:
 
 	// 2-dimensional gizmos
 	static void		add2DLine(const glm::vec2& a_start, const glm::vec2& a_end, const glm::vec4& a_colour);
-	static void		add2DLine(const glm::vec2& a_start, const glm::vec2& a_end, const glm::vec4& a_colour0, const glm::vec4& a_colour1);
-	
-	static void		add2DTri(const glm::vec2& a_0, const glm::vec2& a_1, const glm::vec2& a_2, const glm::vec4& a_colour);
-	
-	static void		add2DAABB(const glm::vec2& a_center, const glm::vec2& a_extents, const glm::vec4& a_colour, const glm::mat4* a_transform = nullptr);
-	
+	static void		add2DLine(const glm::vec2& a_start, const glm::vec2& a_end, const glm::vec4& a_colour0, const glm::vec4& a_colour1);	
+	static void		add2DTri(const glm::vec2& a_0, const glm::vec2& a_1, const glm::vec2& a_2, const glm::vec4& a_colour);	
+	static void		add2DAABB(const glm::vec2& a_center, const glm::vec2& a_extents, const glm::vec4& a_colour, const glm::mat4* a_transform = nullptr);	
+	static void		add2DAABBFilled(const glm::vec2& a_center, const glm::vec2& a_extents, const glm::vec4& a_colour, const glm::mat4* a_transform = nullptr);	
 	static void		add2DCircle(const glm::vec2& a_center, float a_radius, unsigned int a_segments, const glm::vec4& a_colour, const glm::mat4* a_transform = nullptr);
 	
 private:
 
-	Gizmos(unsigned int a_maxLines, unsigned int a_maxTris);
+	Gizmos(unsigned int a_maxLines, unsigned int a_maxTris,
+		   unsigned int a_max2DLines, unsigned int a_max2DTris);
 	~Gizmos();
 
 	struct GizmoVertex
@@ -127,16 +128,28 @@ private:
 
 	unsigned int	m_triVAO;
 	unsigned int 	m_triVBO;
-
-	// triangle data
+	
 	unsigned int	m_transparentTriCount;
 	GizmoTri*		m_transparentTris;
 
 	unsigned int	m_transparentTriVAO;
 	unsigned int 	m_transparentTriVBO;
+	
+	// 2D line data
+	unsigned int	m_max2DLines;
+	unsigned int	m_2DlineCount;
+	GizmoLine*		m_2Dlines;
 
-	// 2D
+	unsigned int	m_2DlineVAO;
+	unsigned int 	m_2DlineVBO;
 
+	// 2D triangle data
+	unsigned int	m_max2DTris;
+	unsigned int	m_2DtriCount;
+	GizmoTri*		m_2Dtris;
+
+	unsigned int	m_2DtriVAO;
+	unsigned int 	m_2DtriVBO;
 
 	static Gizmos*	sm_singleton;
 };

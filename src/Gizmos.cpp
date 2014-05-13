@@ -4,15 +4,22 @@
 
 Gizmos* Gizmos::sm_singleton = nullptr;
 
-Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
+Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris,
+			   unsigned int a_max2DLines, unsigned int a_max2DTris)
 	: m_maxLines(a_maxLines),
-	m_maxTris(a_maxTris),
 	m_lineCount(0),
-	m_triCount(0),
-	m_transparentTriCount(0),
 	m_lines(new GizmoLine[a_maxLines]),
+	m_maxTris(a_maxTris),
+	m_triCount(0),
 	m_tris(new GizmoTri[a_maxTris]),
-	m_transparentTris(new GizmoTri[a_maxTris])
+	m_transparentTriCount(0),
+	m_transparentTris(new GizmoTri[a_maxTris]),
+	m_max2DLines(a_max2DLines),
+	m_2DlineCount(0),
+	m_2Dlines(new GizmoLine[a_max2DLines]),
+	m_max2DTris(a_max2DTris),
+	m_2DtriCount(0),
+	m_2Dtris(new GizmoTri[a_max2DTris])
 {
 	// create shaders
 	const char* vsSource = "#version 150\n \
@@ -53,7 +60,7 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
 		char* infoLog = new char[infoLogLength];
         
 		glGetShaderInfoLog(m_shader, infoLogLength, 0, infoLog);
-		printf("Error: Failed to link shader program!\n");
+		printf("Error: Failed to link Gizmo shader program!\n");
 		printf("%s",infoLog);
 		printf("\n");
 		delete[] infoLog;
@@ -74,6 +81,14 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
 	glGenBuffers( 1, &m_transparentTriVBO );
 	glBindBuffer(GL_ARRAY_BUFFER, m_transparentTriVBO);
 	glBufferData(GL_ARRAY_BUFFER, m_maxTris * sizeof(GizmoTri), m_transparentTris, GL_DYNAMIC_DRAW);
+
+	glGenBuffers( 1, &m_2DlineVBO );
+	glBindBuffer(GL_ARRAY_BUFFER, m_2DlineVBO);
+	glBufferData(GL_ARRAY_BUFFER, m_max2DLines * sizeof(GizmoLine), m_2Dlines, GL_DYNAMIC_DRAW);
+
+	glGenBuffers( 1, &m_2DtriVBO );
+	glBindBuffer(GL_ARRAY_BUFFER, m_2DtriVBO);
+	glBufferData(GL_ARRAY_BUFFER, m_max2DTris * sizeof(GizmoTri), m_2Dtris, GL_DYNAMIC_DRAW);
 
 	glGenVertexArrays(1, &m_lineVAO);
 	glBindVertexArray(m_lineVAO);
@@ -99,6 +114,22 @@ Gizmos::Gizmos(unsigned int a_maxLines, unsigned int a_maxTris)
 	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(GizmoVertex), 0);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_TRUE, sizeof(GizmoVertex), ((char*)0) + 16);
 
+	glGenVertexArrays(1, &m_2DlineVAO);
+	glBindVertexArray(m_2DlineVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, m_2DlineVBO);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(GizmoVertex), 0);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_TRUE, sizeof(GizmoVertex), ((char*)0) + 16);
+
+	glGenVertexArrays(1, &m_2DtriVAO);
+	glBindVertexArray(m_2DtriVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, m_2DtriVBO);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(GizmoVertex), 0);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_TRUE, sizeof(GizmoVertex), ((char*)0) + 16);
+
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -114,13 +145,20 @@ Gizmos::~Gizmos()
 	glDeleteVertexArrays( 1, &m_lineVAO );
 	glDeleteVertexArrays( 1, &m_triVAO );
 	glDeleteVertexArrays( 1, &m_transparentTriVAO );
+	delete[] m_2Dlines;
+	delete[] m_2Dtris;
+	glDeleteBuffers( 1, &m_2DlineVBO );
+	glDeleteBuffers( 1, &m_2DtriVBO );
+	glDeleteVertexArrays( 1, &m_2DlineVAO );
+	glDeleteVertexArrays( 1, &m_2DtriVAO );
 	glDeleteProgram(m_shader);
 }
 
-void Gizmos::create(unsigned int a_maxLines /* = 0xffff */, unsigned int a_maxTris /* = 0xffff */)
+void Gizmos::create(unsigned int a_maxLines /* = 0xffff */, unsigned int a_maxTris /* = 0xffff */,
+					unsigned int a_max2DLines /* = 0xff */, unsigned int a_max2DTris /* = 0xff */)
 {
 	if (sm_singleton == nullptr)
-		sm_singleton = new Gizmos(a_maxLines,a_maxTris);
+		sm_singleton = new Gizmos(a_maxLines,a_maxTris,a_max2DLines,a_max2DTris);
 }
 
 void Gizmos::destroy()
@@ -134,6 +172,8 @@ void Gizmos::clear()
 	sm_singleton->m_lineCount = 0;
 	sm_singleton->m_triCount = 0;
 	sm_singleton->m_transparentTriCount = 0;
+	sm_singleton->m_2DlineCount = 0;
+	sm_singleton->m_2DtriCount = 0;
 }
 
 // Adds 3 unit-length lines (red,green,blue) representing the 3 axis of a transform, 
@@ -245,7 +285,7 @@ void Gizmos::addAABBFilled(const glm::vec3& a_center,
 	addLine(vVerts[3], vVerts[7], vWhite, vWhite);
 
 	// top
-	addTri(vVerts[2], vVerts[1], vVerts[1], a_fillColour);
+	addTri(vVerts[2], vVerts[1], vVerts[0], a_fillColour);
 	addTri(vVerts[3], vVerts[2], vVerts[0], a_fillColour);
 
 	// bottom
@@ -272,18 +312,18 @@ void Gizmos::addAABBFilled(const glm::vec3& a_center,
 void Gizmos::addCylinderFilled(const glm::vec3& a_center, float a_radius, float a_fHalfLength,
 	unsigned int a_segments, const glm::vec4& a_fillColour, const glm::mat4* a_transform /* = nullptr */)
 {
-	glm::vec4 vWhite(1,1,1,1);
+	glm::vec4 white(1,1,1,1);
 
-	float fSegmentSize = (2 * glm::pi<float>()) / a_segments;
+	float segmentSize = (2 * glm::pi<float>()) / a_segments;
 
 	for ( unsigned int i = 0 ; i < a_segments ; ++i )
 	{
 		glm::vec3 v0top(0,a_fHalfLength,0);
-		glm::vec3 v1top( sinf( i * fSegmentSize ) * a_radius, a_fHalfLength, cosf( i * fSegmentSize ) * a_radius);
-		glm::vec3 v2top( sinf( (i+1) * fSegmentSize ) * a_radius, a_fHalfLength, cosf( (i+1) * fSegmentSize ) * a_radius);
+		glm::vec3 v1top( sinf( i * segmentSize ) * a_radius, a_fHalfLength, cosf( i * segmentSize ) * a_radius);
+		glm::vec3 v2top( sinf( (i+1) * segmentSize ) * a_radius, a_fHalfLength, cosf( (i+1) * segmentSize ) * a_radius);
 		glm::vec3 v0bottom(0,-a_fHalfLength,0);
-		glm::vec3 v1bottom( sinf( i * fSegmentSize ) * a_radius, -a_fHalfLength, cosf( i * fSegmentSize ) * a_radius);
-		glm::vec3 v2bottom( sinf( (i+1) * fSegmentSize ) * a_radius, -a_fHalfLength, cosf( (i+1) * fSegmentSize ) * a_radius);
+		glm::vec3 v1bottom( sinf( i * segmentSize ) * a_radius, -a_fHalfLength, cosf( i * segmentSize ) * a_radius);
+		glm::vec3 v2bottom( sinf( (i+1) * segmentSize ) * a_radius, -a_fHalfLength, cosf( (i+1) * segmentSize ) * a_radius);
 
 		if (a_transform != nullptr)
 		{
@@ -302,9 +342,9 @@ void Gizmos::addCylinderFilled(const glm::vec3& a_center, float a_radius, float 
 		addTri( a_center + v1bottom, a_center + v2bottom, a_center + v2top, a_fillColour);
 
 		// lines
-		addLine(a_center + v1top, a_center + v2top, vWhite, vWhite);
-		addLine(a_center + v1top, a_center + v1bottom, vWhite, vWhite);
-		addLine(a_center + v1bottom, a_center + v2bottom, vWhite, vWhite);
+		addLine(a_center + v1top, a_center + v2top, white, white);
+		addLine(a_center + v1top, a_center + v1bottom, white, white);
+		addLine(a_center + v1bottom, a_center + v2bottom, white, white);
 	}
 }
 
@@ -369,7 +409,7 @@ void Gizmos::addDisk(const glm::vec3& a_center, float a_radius,
 
 		if (a_fillColour.w != 0)
 		{
-			addTri(a_center, v1outer, a_center + v2outer, a_fillColour);
+			addTri(a_center, a_center + v1outer, a_center + v2outer, a_fillColour);
 			addTri(a_center + v2outer, a_center + v1outer, a_center, a_fillColour);
 		}
 		else
@@ -635,10 +675,121 @@ void Gizmos::addTri(const glm::vec3& a_rv0, const glm::vec3& a_rv1, const glm::v
 	}
 }
 
+void Gizmos::add2DAABB(const glm::vec2& a_center, const glm::vec2& a_extents, const glm::vec4& a_colour, const glm::mat4* a_transform /*= nullptr*/)
+{	
+	glm::vec2 verts[4];
+	glm::vec2 vX(a_extents.x, 0);
+	glm::vec2 vY(0, a_extents.y);
+
+	if (a_transform != nullptr)
+	{
+		vX = (*a_transform * glm::vec4(vX,0,0)).xy();
+		vY = (*a_transform * glm::vec4(vY,0,0)).xy();
+	}
+
+	verts[0] = a_center - vX - vY;
+	verts[1] = a_center + vX - vY;
+	verts[2] = a_center - vX + vY;
+	verts[3] = a_center + vX + vY;
+
+	add2DLine(verts[0], verts[1], a_colour, a_colour);
+	add2DLine(verts[1], verts[2], a_colour, a_colour);
+	add2DLine(verts[2], verts[3], a_colour, a_colour);
+	add2DLine(verts[3], verts[0], a_colour, a_colour);
+}
+
+void Gizmos::add2DAABBFilled(const glm::vec2& a_center, const glm::vec2& a_extents, const glm::vec4& a_colour, const glm::mat4* a_transform /*= nullptr*/)
+{	
+	glm::vec2 verts[4];
+	glm::vec2 vX(a_extents.x, 0);
+	glm::vec2 vY(0, a_extents.y);
+
+	if (a_transform != nullptr)
+	{
+		vX = (*a_transform * glm::vec4(vX,0,0)).xy();
+		vY = (*a_transform * glm::vec4(vY,0,0)).xy();
+	}
+
+	verts[0] = a_center - vX - vY;
+	verts[1] = a_center + vX - vY;
+	verts[2] = a_center + vX + vY;
+	verts[3] = a_center - vX + vY;
+	
+	add2DTri(verts[0], verts[1], verts[2], a_colour);
+	add2DTri(verts[0], verts[2], verts[3], a_colour);
+}
+
+void Gizmos::add2DCircle(const glm::vec2& a_center, float a_radius, unsigned int a_segments, const glm::vec4& a_colour, const glm::mat4* a_transform /*= nullptr*/)
+{
+	glm::vec4 solidColour = a_colour;
+	solidColour.w = 1;
+
+	float segmentSize = (2 * glm::pi<float>()) / a_segments;
+
+	for ( unsigned int i = 0 ; i < a_segments ; ++i )
+	{
+		glm::vec2 v1outer( sinf( i * segmentSize ) * a_radius, cosf( i * segmentSize ) * a_radius );
+		glm::vec2 v2outer( sinf( (i+1) * segmentSize ) * a_radius, cosf( (i+1) * segmentSize ) * a_radius );
+
+		if (a_transform != nullptr)
+		{
+			v1outer = (*a_transform * glm::vec4(v1outer,0,0)).xy();
+			v2outer = (*a_transform * glm::vec4(v2outer,0,0)).xy();
+		}
+
+		if (a_colour.w != 0)
+		{
+			add2DTri(a_center, a_center + v1outer, a_center + v2outer, a_colour);
+			add2DTri(a_center + v2outer, a_center + v1outer, a_center, a_colour);
+		}
+		else
+		{
+			// line
+			add2DLine(a_center + v1outer, a_center + v2outer, solidColour, solidColour);
+		}
+	}
+}
+
+void Gizmos::add2DLine(const glm::vec2& a_rv0,  const glm::vec2& a_rv1, const glm::vec4& a_colour)
+{
+	add2DLine(a_rv0,a_rv1,a_colour,a_colour);
+}
+
+void Gizmos::add2DLine(const glm::vec2& a_rv0, const glm::vec2& a_rv1, const glm::vec4& a_colour0, const glm::vec4& a_colour1)
+{
+	if (sm_singleton != nullptr &&
+		sm_singleton->m_2DlineCount < sm_singleton->m_max2DLines)
+	{
+		sm_singleton->m_2Dlines[ sm_singleton->m_2DlineCount ].v0.position = glm::vec4(a_rv0,1,1);
+		sm_singleton->m_2Dlines[ sm_singleton->m_2DlineCount ].v0.colour = a_colour0;
+		sm_singleton->m_2Dlines[ sm_singleton->m_2DlineCount ].v1.position = glm::vec4(a_rv1,1,1);
+		sm_singleton->m_2Dlines[ sm_singleton->m_2DlineCount ].v1.colour = a_colour1;
+
+		sm_singleton->m_2DlineCount++;
+	}
+}
+
+void Gizmos::add2DTri(const glm::vec2& a_rv0, const glm::vec2& a_rv1, const glm::vec2& a_rv2, const glm::vec4& a_colour)
+{
+	if (sm_singleton != nullptr)
+	{
+		if (sm_singleton->m_2DtriCount < sm_singleton->m_max2DTris)
+		{
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v0.position = glm::vec4(a_rv0,1,1);
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v1.position = glm::vec4(a_rv1,1,1);
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v2.position = glm::vec4(a_rv2,1,1);
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v0.colour = a_colour;
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v1.colour = a_colour;
+			sm_singleton->m_2Dtris[ sm_singleton->m_2DtriCount ].v2.colour = a_colour;
+
+			sm_singleton->m_2DtriCount++;
+		}
+	}
+}
+
 void Gizmos::draw(const glm::mat4& a_projectionView)
 {
-	if ( sm_singleton != nullptr &&
-		(sm_singleton->m_lineCount > 0 || sm_singleton->m_triCount > 0 || sm_singleton->m_transparentTriCount > 0))
+	if ( sm_singleton != nullptr && (sm_singleton->m_lineCount > 0 || sm_singleton->m_triCount > 0 || sm_singleton->m_transparentTriCount > 0))
 	{
 		glUseProgram(sm_singleton->m_shader);
 		
@@ -662,21 +813,90 @@ void Gizmos::draw(const glm::mat4& a_projectionView)
 			glBindVertexArray(sm_singleton->m_triVAO);
 			glDrawArrays(GL_TRIANGLES, 0, sm_singleton->m_triCount * 3);
 		}
-		
+
 		if (sm_singleton->m_transparentTriCount > 0)
 		{
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			// not ideal to store these, but Gizmos must work stand-alone
+			GLboolean blendEnabled = glIsEnabled(GL_BLEND);
+			GLboolean depthMask = GL_TRUE;
+			glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+			int src, dst;
+			glGetIntegerv(GL_BLEND_SRC, &src);
+			glGetIntegerv(GL_BLEND_DST, &dst);
 
-			glDepthMask(false);
+			// setup blend states
+			if (blendEnabled == GL_FALSE)
+				glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glDepthMask(GL_FALSE);
+
 			glBindBuffer(GL_ARRAY_BUFFER, sm_singleton->m_transparentTriVBO);
 			glBufferSubData(GL_ARRAY_BUFFER, 0, sm_singleton->m_transparentTriCount * sizeof(GizmoTri), sm_singleton->m_transparentTris);
 
 			glBindVertexArray(sm_singleton->m_transparentTriVAO);
 			glDrawArrays(GL_TRIANGLES, 0, sm_singleton->m_transparentTriCount * 3);
-			glDepthMask(true);
+
+			// reset state
+			glDepthMask(depthMask);
+			glBlendFunc(src, dst);
+			if (blendEnabled == GL_FALSE)
+				glDisable(GL_BLEND);
 		}
+
+		glUseProgram(0);
+	}
+}
+
+void Gizmos::draw2D(const glm::mat4& a_projection)
+{
+	if ( sm_singleton != nullptr && (sm_singleton->m_2DlineCount > 0 || sm_singleton->m_2DtriCount > 0))
+	{
+		glUseProgram(sm_singleton->m_shader);
 		
+		unsigned int projectionViewUniform = glGetUniformLocation(sm_singleton->m_shader,"ProjectionView");
+		glUniformMatrix4fv(projectionViewUniform, 1, false, glm::value_ptr(a_projection));
+
+		if (sm_singleton->m_2DlineCount > 0)
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, sm_singleton->m_2DlineVBO);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, sm_singleton->m_2DlineCount * sizeof(GizmoLine), sm_singleton->m_2Dlines);
+
+			glBindVertexArray(sm_singleton->m_2DlineVAO);
+			glDrawArrays(GL_LINES, 0, sm_singleton->m_2DlineCount * 2);
+		}
+
+		if (sm_singleton->m_2DtriCount > 0)
+		{
+			GLboolean blendEnabled = glIsEnabled(GL_BLEND);
+
+			GLboolean depthMask = GL_TRUE;
+			glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+
+			int src, dst;
+			glGetIntegerv(GL_BLEND_SRC, &src);
+			glGetIntegerv(GL_BLEND_DST, &dst);
+
+			if (blendEnabled == GL_FALSE)
+				glEnable(GL_BLEND);
+
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			glDepthMask(GL_FALSE);
+
+			glBindBuffer(GL_ARRAY_BUFFER, sm_singleton->m_2DtriVBO);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, sm_singleton->m_2DtriCount * sizeof(GizmoTri), sm_singleton->m_2Dtris);
+
+			glBindVertexArray(sm_singleton->m_2DtriVAO);
+			glDrawArrays(GL_TRIANGLES, 0, sm_singleton->m_2DtriCount * 3);
+
+			glDepthMask(depthMask);
+
+			glBlendFunc(src, dst);
+
+			if (blendEnabled == GL_FALSE)
+				glDisable(GL_BLEND);
+		}
+
 		glUseProgram(0);
 	}
 }

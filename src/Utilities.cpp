@@ -85,6 +85,34 @@ void Utility::build3DPlane(float a_size, unsigned int& a_vao, unsigned int& a_vb
 	glBindVertexArray(0);
 }
 
+// create a shader from an array of strings
+unsigned int Utility::createShader(unsigned int a_stringCount, const char** a_strings, unsigned int a_type)
+{
+	int success = GL_FALSE;
+
+	unsigned int handle = glCreateShader(a_type);
+
+	glShaderSource(handle, a_stringCount, a_strings, 0);
+	glCompileShader(handle);
+	
+	glGetShaderiv(handle, GL_COMPILE_STATUS, &success);
+	if (success == GL_FALSE)
+	{
+		int infoLogLength = 0;		
+		glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &infoLogLength);
+		char* infoLog = new char[infoLogLength];
+
+		glGetShaderInfoLog(handle, infoLogLength, 0, infoLog);
+		printf("Error: Failed to compile shader!\n");
+		printf("%s",infoLog);
+		printf("\n");
+		delete[] infoLog;
+		return 0;
+	}
+
+	return handle;
+}
+
 // loads a shader from a file and creates it for the specified stage
 unsigned int Utility::loadShader(const char* a_filename, unsigned int a_type)
 {
