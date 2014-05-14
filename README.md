@@ -21,3 +21,4 @@ Dependencies:
   - GLFW
   - GLM
   - SOIL
+  - FBX SDK (for the optional FBXLoader library)
