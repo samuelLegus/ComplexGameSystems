@@ -12,3 +12,12 @@ Purpose:
   - A helper class for easily drawing debug 3D "widgets" will be provided so that basic 
     math ideas can be demonstrated, along with A.I. entities and physics, without the need to 
     load a model.
+
+Dependencies:
+
+  This project depends on the following 3rd-party libraries:
+
+  - GLEW
+  - GLFW
+  - GLM
+  - SOIL
