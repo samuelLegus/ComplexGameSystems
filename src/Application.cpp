@@ -27,9 +27,9 @@ bool Application::create(const char* a_name, int a_width, int a_height, int a_ar
 		return false;
 	}
     
-    int major = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_VERSION_MAJOR);
-    int minor = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_VERSION_MINOR);
-    int revision = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_REVISION);
+    auto major = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_VERSION_MAJOR);
+    auto minor = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_VERSION_MINOR);
+    auto revision = glfwGetWindowAttrib(m_window, GLFW_CONTEXT_REVISION);
     printf("GL %i.%i.%i\n",major,minor,revision);
 
 	// make the window's context current

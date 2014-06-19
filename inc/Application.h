@@ -2,6 +2,7 @@
 
 struct GLFWwindow;
 
+// base class that each project can inherit from
 class Application
 {
 public:

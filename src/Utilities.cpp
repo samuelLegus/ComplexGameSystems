@@ -7,34 +7,24 @@
 
 #include "Utilities.h"
 
-static double s_prevTime = 0;
-static float s_totalTime = 0;
-static float s_deltaTime = 0;
+double Utility::sm_prevTime = 0;
+float Utility::sm_deltaTime = 0;
+float Utility::sm_totalTime = 0;
 
 void Utility::resetTimer()
 {
-	s_prevTime = glfwGetTime();
-	s_totalTime = 0;
-	s_deltaTime = 0;
+	sm_prevTime = glfwGetTime();
+	sm_totalTime = 0;
+	sm_deltaTime = 0;
 }
 
 float Utility::tickTimer()
 {
 	double currentTime = glfwGetTime();
-	s_deltaTime = (float)(currentTime - s_prevTime);
-	s_totalTime += s_deltaTime;
-	s_prevTime = currentTime;
-	return s_deltaTime;
-}
-
-float Utility::getDeltaTime()
-{
-	return s_deltaTime;
-}
-
-float Utility::getTotalTime()
-{
-	return s_totalTime;
+	sm_deltaTime = (float)(currentTime - sm_prevTime);
+	sm_totalTime += sm_deltaTime;
+	sm_prevTime = currentTime;
+	return sm_deltaTime;
 }
 
 // builds a simple 2 triangle quad with a position, colour and texture coordinates
@@ -94,7 +84,7 @@ unsigned int Utility::createShader(unsigned int a_stringCount, const char** a_st
 
 	glShaderSource(handle, a_stringCount, a_strings, 0);
 	glCompileShader(handle);
-	
+		
 	glGetShaderiv(handle, GL_COMPILE_STATUS, &success);
 	if (success == GL_FALSE)
 	{
@@ -188,13 +178,13 @@ unsigned int Utility::createProgram(unsigned int a_vertexShader, unsigned int a_
 	return handle;
 }
 
-unsigned char* Utility::fileToBuffer(const char* a_sPath)
+unsigned char* Utility::fileToBuffer(const char* a_filename)
 {
 	// open file for text reading
-	FILE* pFile = fopen(a_sPath,"rb");
+	FILE* pFile = fopen(a_filename,"rb");
 	if (pFile == nullptr)
 	{
-		printf("Error: Unable to open file '%s' for reading!\n",a_sPath);
+		printf("Error: Unable to open file '%s' for reading!\n",a_filename);
 		return nullptr;
 	}
 

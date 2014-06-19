@@ -2,17 +2,16 @@
 #include <fbxsdk.h>
 #include <algorithm>
 #include <set>
-#include <SOIL.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/matrix_inverse.hpp>
-#include <glm/gtx/transform.hpp>
-#include <glm/gtx/norm.hpp>
 
 // only needed for texture cleanup
 #define GLEW_NO_GLU
 #include <GL/glew.h>
 
-#include <GLFW\glfw3.h>
+#include <SOIL.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtx/transform.hpp>
+#include <glm/gtx/norm.hpp>
 
 struct ImportAssistor
 {
@@ -27,8 +26,6 @@ struct ImportAssistor
 	bool					loadTextures;
 	bool					loadAnimations;
 	bool					loadAnimationOnly;
-
-	//FBXFile::UNIT_SCALE		unitScale;
 	float					unitScale;
 
 	std::map<std::string,int> boneIndexList;
@@ -39,18 +36,6 @@ void FBXFile::unload()
 	delete m_root;
 	m_root = nullptr;
 
-#if (_MSC_VER == 1600)
-	for each (auto m in m_materials)
-		delete m.second;
-	for each (auto s in m_skeletons)
-		delete s;
-	for each (auto a in m_animations)
-		delete a.second;
-	for each (auto t in m_textures)
-	{
-		glDeleteTextures(1, &(t.second));
-	}
-#else
 	for (auto m : m_materials)
 		delete m.second;
 	for (auto s : m_skeletons)
@@ -58,10 +43,7 @@ void FBXFile::unload()
 	for (auto a : m_animations)
 		delete a.second;
 	for (auto t : m_textures)
-	{
-		glDeleteTextures(1, &(t.second));
-	}
-#endif
+		delete t.second;
 
 	m_meshes.clear();
 	m_lights.clear();
@@ -121,7 +103,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	lImporter->GetFileVersion(lFileMajor, lFileMinor, lFileRevision);
 
 	lScene = FbxScene::Create(lSdkManager,"root");
-	
+
 	// Import the scene.
 	lStatus = lImporter->Import(lScene);
 	lImporter->Destroy();
@@ -153,16 +135,19 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	
 	// convert the scene to OpenGL axis (right-handed Y up)
 	FbxAxisSystem::OpenGL.ConvertScene(lScene);
-	
+
+	// DID NOT KNOW WE COULD DO THIS!!!!
+	/*
 	// Convert mesh, NURBS and patch into triangle mesh
-	FbxGeometryConverter lGeomConverter(lSdkManager);
-//	lGeomConverter.Triangulate(lScene, true);
-	
+	FbxGeometryConverter lGeomConverter(mSdkManager);
+	lGeomConverter.Triangulate(mScene, true);
+
 	// Split meshes per material, so that we only have one material per mesh (for VBO support)
-	lGeomConverter.SplitMeshesPerMaterial(lScene, true);
-	
+	lGeomConverter.SplitMeshesPerMaterial(mScene, true);
+	*/
+
 	FbxNode* lNode = lScene->GetRootNode();
-	
+
 	if (lNode != nullptr)
 	{
 		// store the folder path of the scene
@@ -188,10 +173,10 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 		m_importAssistor->importer = lImporter;
 		m_importAssistor->loadTextures = a_loadTextures;
 		m_importAssistor->loadAnimations = a_loadAnimations;
-		m_importAssistor->unitScale = unitScale;//a_scale;
+		m_importAssistor->unitScale = unitScale;
 
 		m_root = new FBXNode();
-		strcpy(m_root->m_name,"root");
+		m_root->m_name = "root";
 		m_root->m_globalTransform = m_root->m_localTransform = glm::mat4(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1);
 
 		// grab the ambient light data from the scene
@@ -199,7 +184,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 		m_ambientLight.y = (float)lScene->GetGlobalSettings().GetAmbientColor().mGreen;
 		m_ambientLight.z = (float)lScene->GetGlobalSettings().GetAmbientColor().mBlue;
 		m_ambientLight.w = (float)lScene->GetGlobalSettings().GetAmbientColor().mAlpha;
-		
+
 		// gather bones to create indices for them in a skeleton
 		if (a_loadAnimations == true)
 		{
@@ -214,6 +199,11 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 		{
 			extractObject(m_root, (void*)lNode->GetChild(i));
 		}
+
+		// ensure all threads are finished
+		for (auto t : m_threads)
+			t->join();
+		m_threads.clear();
 
 		// build skeleton and extract animation keyframes
 		if (a_loadAnimations == true &&
@@ -259,7 +249,21 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	}
 
 	lSdkManager->Destroy();
-	
+
+	// load textures!
+	for (auto texture : m_textures)
+		m_threads.push_back( new std::thread( [](FBXTexture* t){
+			t->data = SOIL_load_image(t->path.c_str(), &t->width, &t->height, &t->channels, SOIL_LOAD_AUTO);
+			if (t->data == nullptr)
+			{
+				printf("Failed to load texture: %s\n", t->path.c_str());
+			}
+	}, texture.second));
+
+	for (auto t : m_threads)
+		t->join();
+	m_threads.clear();
+
 	return true;
 }
 
@@ -374,10 +378,10 @@ bool FBXFile::loadAnimationsOnly(const char* a_filename, UNIT_SCALE a_scale /* =
 		m_importAssistor->loadTextures = false;
 		m_importAssistor->loadAnimations = true;
 		m_importAssistor->loadAnimationOnly = true;
-		m_importAssistor->unitScale = unitScale;//a_scale;
+		m_importAssistor->unitScale = unitScale;
 
 		m_root = new FBXNode();
-		strcpy(m_root->m_name,"root");
+		m_root->m_name = "root";
 		m_root->m_globalTransform = m_root->m_localTransform = glm::mat4(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1);
 
 		// grab the ambient light data from the scene
@@ -463,7 +467,18 @@ void FBXFile::extractObject(FBXNode* a_parent, void* a_object)
 		case FbxNodeAttribute::eMesh:      
 			{
 				if (m_importAssistor->loadAnimationOnly == false)
-					node = (FBXNode*)extractMeshes(fbxNode);
+				{
+					if (fbxNode->GetMaterialCount() > 1)
+					{
+						node = new FBXNode();
+						extractMeshes(fbxNode,node);
+					}
+					else
+					{
+						node = new FBXMeshNode();
+						extractMeshes(fbxNode,node);
+					}
+				}
 			}
 			break;
 
@@ -473,9 +488,8 @@ void FBXFile::extractObject(FBXNode* a_parent, void* a_object)
 				{
 					node = new FBXCameraNode();
 					extractCamera((FBXCameraNode*)node,fbxNode);
-
-					if (strlen(fbxNode->GetName()) > 0)
-						strncpy(node->m_name,fbxNode->GetName(),MAX_PATH-1);
+					
+					node->m_name = fbxNode->GetName();
 
 					m_cameras[node->m_name] = (FBXCameraNode*)node;
 				}
@@ -488,9 +502,8 @@ void FBXFile::extractObject(FBXNode* a_parent, void* a_object)
 				{
 					node = new FBXLightNode();
 					extractLight((FBXLightNode*)node,fbxNode);
-
-					if (strlen(fbxNode->GetName()) > 0)
-						strncpy(node->m_name,fbxNode->GetName(),MAX_PATH-1);
+					
+					node->m_name = fbxNode->GetName();
 
 					m_lights[node->m_name] = (FBXLightNode*)node;
 				}
@@ -506,8 +519,7 @@ void FBXFile::extractObject(FBXNode* a_parent, void* a_object)
 	if (node == nullptr)
 	{
 		node = new FBXNode();
-		if (strlen(fbxNode->GetName()) > 0)
-			strncpy(node->m_name,fbxNode->GetName(),MAX_PATH-1);
+		node->m_name = fbxNode->GetName();
 	}
 
 	// add to parent's children and update parent
@@ -536,7 +548,7 @@ void FBXFile::extractObject(FBXNode* a_parent, void* a_object)
 	}
 }
 
-void* FBXFile::extractMeshes(void* a_object)
+void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 {
 	FbxNode* fbxNode = (FbxNode*)a_object;
 	FbxMesh* fbxMesh = (FbxMesh*)fbxNode->GetNodeAttribute();
@@ -545,32 +557,35 @@ void* FBXFile::extractMeshes(void* a_object)
 	FbxVector4* lControlPoints = fbxMesh->GetControlPoints(); 
 	FbxGeometryElementMaterial* lMaterialElement = fbxMesh->GetElementMaterial(0);
 
-	int materialCount = fbxNode->GetMaterialCount() >= 1 ? 1 : 0;
+	int materialCount = fbxNode->GetMaterialCount();
 
 	FBXMeshNode** meshes = new FBXMeshNode * [ materialCount ];
-	for ( j = 0 ; j < materialCount ; ++j )
-		meshes[j] = new FBXMeshNode();
-
+	if (materialCount == 1)
+		meshes[0] = (FBXMeshNode*)a_aieNode;
+	else
+		for ( j = 0 ; j < materialCount ; ++j )
+		{
+			meshes[j] = new FBXMeshNode();
+			meshes[j]->m_vertexAttributes = 0;
+		}
+	
 	unsigned int vertexIndex[4] = {};
+	FBXVertex vertexQuad[4];
 
 	unsigned int* nextIndex = new unsigned int[ materialCount ];
 	for ( j = 0 ; j < materialCount ; ++j )
 		nextIndex[j] = 0;
-	std::map<FBXVertex,unsigned int>* vertexIndexMap = new std::map<FBXVertex,unsigned int>[ materialCount ];
-
+	
 	FbxGeometryElementVertexColor* fbxColours = fbxMesh->GetElementVertexColor(0);
 	FbxGeometryElementUV* fbxTexCoord0 = fbxMesh->GetElementUV(0);
 	FbxGeometryElementUV* fbxTexCoord1 = fbxMesh->GetElementUV(1);
 	FbxGeometryElementNormal* fbxNormal = fbxMesh->GetElementNormal(0);
-	FbxGeometryElementTangent* fbxTangent = fbxMesh->GetElementTangent(0);
-	FbxGeometryElementBinormal* fbxBiNormal = fbxMesh->GetElementBinormal(0);
 
 	// gather skinning info
 	FbxSkin* fbxSkin = (FbxSkin*)fbxMesh->GetDeformer(0, FbxDeformer::eSkin);
 	int skinClusterCount = fbxSkin != nullptr ? fbxSkin->GetClusterCount() : 0;
 	FbxCluster** skinClusters = nullptr;
 	int* skinClusterBoneIndices = nullptr;
-	char linkName[MAX_PATH];	
 	if (skinClusterCount > 0)
 	{
 		skinClusters = new FbxCluster * [ skinClusterCount ];
@@ -585,14 +600,12 @@ void* FBXFile::extractMeshes(void* a_object)
 			}
 			else
 			{
-				strncpy(linkName,skinClusters[i]->GetLink()->GetName(),MAX_PATH);
-				skinClusterBoneIndices[i] = m_importAssistor->boneIndexList[linkName];
+				skinClusterBoneIndices[i] = m_importAssistor->boneIndexList[ skinClusters[i]->GetLink()->GetName() ];
 			}
 		}
 	}
 
-	unsigned int vertexAttributes = 0;
-
+	// needed for accessing certain vertex properties
 	int vertexId = 0;
 
 	// process each polygon (tris and quads only)
@@ -614,7 +627,7 @@ void* FBXFile::extractMeshes(void* a_object)
 			vertex.position.z = (float)vPos[2];
 			vertex.position.w = 1;
 			
-			vertexAttributes |= FBXVertex::POSITION;
+			meshes[material]->m_vertexAttributes |= FBXVertex::ePOSITION;
 			
 			// extract colour data
 			if (fbxColours != nullptr)
@@ -627,7 +640,7 @@ void* FBXFile::extractMeshes(void* a_object)
 					case FbxGeometryElement::eDirect:
 						{						
 							FbxColor colour = fbxColours->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::COLOUR;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eCOLOUR;
 
 							vertex.colour.x = (float)colour.mRed;
 							vertex.colour.y = (float)colour.mGreen;
@@ -639,7 +652,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						{
 							int id = fbxColours->GetIndexArray().GetAt(controlPointIndex);
 							FbxColor colour = fbxColours->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::COLOUR;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eCOLOUR;
 
 							vertex.colour.x = (float)colour.mRed;
 							vertex.colour.y = (float)colour.mGreen;
@@ -659,7 +672,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						case FbxGeometryElement::eDirect:
 							{							
 								FbxColor colour = fbxColours->GetDirectArray().GetAt(vertexId);
-								vertexAttributes |= FBXVertex::COLOUR;
+								meshes[material]->m_vertexAttributes |= FBXVertex::eCOLOUR;
 
 								vertex.colour.x = (float)colour.mRed;
 								vertex.colour.y = (float)colour.mGreen;
@@ -671,7 +684,7 @@ void* FBXFile::extractMeshes(void* a_object)
 							{
 								int id = fbxColours->GetIndexArray().GetAt(vertexId);
 								FbxColor colour = fbxColours->GetDirectArray().GetAt(id);
-								vertexAttributes |= FBXVertex::COLOUR;
+								meshes[material]->m_vertexAttributes |= FBXVertex::eCOLOUR;
 
 								vertex.colour.x = (float)colour.mRed;
 								vertex.colour.y = (float)colour.mGreen;
@@ -703,7 +716,7 @@ void* FBXFile::extractMeshes(void* a_object)
 					case FbxGeometryElement::eDirect:
 						{
 							FbxVector2 uv = fbxTexCoord0->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::TEXCOORD1;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 							vertex.texCoord1.x = (float)uv[0];
 							vertex.texCoord1.y = (float)uv[1];
@@ -713,7 +726,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						{
 							int id = fbxTexCoord0->GetIndexArray().GetAt(controlPointIndex);
 							FbxVector2 uv = fbxTexCoord0->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::TEXCOORD1;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 							vertex.texCoord1.x = (float)uv[0];
 							vertex.texCoord1.y = (float)uv[1];
@@ -733,7 +746,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						case FbxGeometryElement::eIndexToDirect:
 							{
 								FbxVector2 uv = fbxTexCoord0->GetDirectArray().GetAt(lTextureUVIndex);
-								vertexAttributes |= FBXVertex::TEXCOORD1;
+								meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 								vertex.texCoord1.x = (float)uv[0];
 								vertex.texCoord1.y = (float)uv[1];
@@ -764,7 +777,7 @@ void* FBXFile::extractMeshes(void* a_object)
 					case FbxGeometryElement::eDirect:
 						{
 							FbxVector2 uv = fbxTexCoord1->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::TEXCOORD2;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 							vertex.texCoord2.x = (float)uv[0];
 							vertex.texCoord2.y = (float)uv[1];
@@ -774,7 +787,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						{
 							int id = fbxTexCoord1->GetIndexArray().GetAt(controlPointIndex);
 							FbxVector2 uv = fbxTexCoord1->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::TEXCOORD2;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 							vertex.texCoord2.x = (float)uv[0];
 							vertex.texCoord2.y = (float)uv[1];
@@ -794,7 +807,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						case FbxGeometryElement::eIndexToDirect:
 							{
 								FbxVector2 uv = fbxTexCoord1->GetDirectArray().GetAt(lTextureUVIndex);
-								vertexAttributes |= FBXVertex::TEXCOORD2;
+								meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 								vertex.texCoord2.x = (float)uv[0];
 								vertex.texCoord2.y = (float)uv[1];
@@ -824,7 +837,7 @@ void* FBXFile::extractMeshes(void* a_object)
 					case FbxGeometryElement::eDirect:
 						{
 							FbxVector4 normal = fbxNormal->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::NORMAL;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eNORMAL;
 
 							vertex.normal.x = (float)normal[0];
 							vertex.normal.y = (float)normal[1];
@@ -836,7 +849,7 @@ void* FBXFile::extractMeshes(void* a_object)
 						{
 							int id = fbxNormal->GetIndexArray().GetAt(controlPointIndex);
 							FbxVector4 normal = fbxNormal->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::NORMAL;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eNORMAL;
 
 							vertex.normal.x = (float)normal[0];
 							vertex.normal.y = (float)normal[1];
@@ -855,7 +868,7 @@ void* FBXFile::extractMeshes(void* a_object)
 					case FbxGeometryElement::eDirect:
 						{
 							FbxVector4 normal = fbxNormal->GetDirectArray().GetAt(vertexId);
-							vertexAttributes |= FBXVertex::NORMAL;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eNORMAL;
 
 							vertex.normal.x = (float)normal[0];
 							vertex.normal.y = (float)normal[1];
@@ -867,146 +880,12 @@ void* FBXFile::extractMeshes(void* a_object)
 						{
 							int id = fbxNormal->GetIndexArray().GetAt(vertexId);
 							FbxVector4 normal = fbxNormal->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::NORMAL;
+							meshes[material]->m_vertexAttributes |= FBXVertex::eNORMAL;
 
 							vertex.normal.x = (float)normal[0];
 							vertex.normal.y = (float)normal[1];
 							vertex.normal.z = (float)normal[2];
 							vertex.normal.w = 0;
-						}
-						break;
-					default:
-						break; // other reference modes not shown here!
-					}
-				}
-			}
-
-			// extract tangent data (if it exists)
-			if (fbxTangent != nullptr)
-			{
-				if (fbxTangent->GetMappingMode() == FbxGeometryElement::eByControlPoint)
-				{
-					switch (fbxTangent->GetReferenceMode())
-					{
-					case FbxGeometryElement::eDirect:
-						{
-							FbxVector4 normal = fbxTangent->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::TANGENT;
-
-							vertex.tangent.x = (float)normal[0];
-							vertex.tangent.y = (float)normal[1];
-							vertex.tangent.z = (float)normal[2];
-							vertex.tangent.w = 0;
-						}
-						break;
-					case FbxGeometryElement::eIndexToDirect:
-						{
-							int id = fbxTangent->GetIndexArray().GetAt(controlPointIndex);
-							FbxVector4 normal = fbxTangent->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::TANGENT;
-
-							vertex.tangent.x = (float)normal[0];
-							vertex.tangent.y = (float)normal[1];
-							vertex.tangent.z = (float)normal[2];
-							vertex.tangent.w = 0;
-						}
-						break;
-					default:
-						break; // other reference modes not shown here!
-					}
-				}
-				else if(fbxTangent->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-				{
-					switch (fbxTangent->GetReferenceMode())
-					{
-					case FbxGeometryElement::eDirect:
-						{
-							FbxVector4 normal = fbxTangent->GetDirectArray().GetAt(vertexId);
-							vertexAttributes |= FBXVertex::TANGENT;
-
-							vertex.tangent.x = (float)normal[0];
-							vertex.tangent.y = (float)normal[1];
-							vertex.tangent.z = (float)normal[2];
-							vertex.tangent.w = 0;
-						}
-						break;
-					case FbxGeometryElement::eIndexToDirect:
-						{
-							int id = fbxTangent->GetIndexArray().GetAt(vertexId);
-							FbxVector4 normal = fbxTangent->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::TANGENT;
-
-							vertex.tangent.x = (float)normal[0];
-							vertex.tangent.y = (float)normal[1];
-							vertex.tangent.z = (float)normal[2];
-							vertex.tangent.w = 0;
-						}
-						break;
-					default:
-						break; // other reference modes not shown here!
-					}
-				}
-			}
-
-			// extract binormal data if it exists
-			if (fbxBiNormal != nullptr)
-			{
-				if (fbxBiNormal->GetMappingMode() == FbxGeometryElement::eByControlPoint)
-				{
-					switch (fbxBiNormal->GetReferenceMode())
-					{
-					case FbxGeometryElement::eDirect:
-						{
-							FbxVector4 normal = fbxBiNormal->GetDirectArray().GetAt(controlPointIndex);
-							vertexAttributes |= FBXVertex::BINORMAL;
-
-							vertex.binormal.x = (float)normal[0];
-							vertex.binormal.y = (float)normal[1];
-							vertex.binormal.z = (float)normal[2];
-							vertex.binormal.w = 0;
-						}
-						break;
-					case FbxGeometryElement::eIndexToDirect:
-						{
-							int id = fbxBiNormal->GetIndexArray().GetAt(controlPointIndex);
-							FbxVector4 normal = fbxBiNormal->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::BINORMAL;
-
-							vertex.binormal.x = (float)normal[0];
-							vertex.binormal.y = (float)normal[1];
-							vertex.binormal.z = (float)normal[2];
-							vertex.binormal.w = 0;
-						}
-						break;
-					default:
-						break; // other reference modes not shown here!
-					}
-				}
-				else if(fbxBiNormal->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-				{
-					switch (fbxBiNormal->GetReferenceMode())
-					{
-					case FbxGeometryElement::eDirect:
-						{
-							FbxVector4 normal = fbxBiNormal->GetDirectArray().GetAt(vertexId);
-							vertexAttributes |= FBXVertex::BINORMAL;
-
-							vertex.binormal.x = (float)normal[0];
-							vertex.binormal.y = (float)normal[1];
-							vertex.binormal.z = (float)normal[2];
-							vertex.binormal.w = 0;
-						}
-						break;
-					case FbxGeometryElement::eIndexToDirect:
-						{
-							int id = fbxBiNormal->GetIndexArray().GetAt(vertexId);
-							FbxVector4 normal = fbxBiNormal->GetDirectArray().GetAt(id);
-							vertexAttributes |= FBXVertex::BINORMAL;
-
-							vertex.binormal.x = (float)normal[0];
-							vertex.binormal.y = (float)normal[1];
-							vertex.binormal.z = (float)normal[2];
-							vertex.binormal.w = 0;
 						}
 						break;
 					default:
@@ -1057,85 +936,58 @@ void* FBXFile::extractMeshes(void* a_object)
 				}
 			}
 
-			// either add a new unique vertex or use an existing one
-//			auto iter = vertexIndexMap[material].find( vertex );
-	//		if (iter == vertexIndexMap[material].end())
-			{
-				// add new unique vertex
-				meshes[material]->m_vertices.push_back(vertex);
-		//		vertexIndexMap[material].insert( std::make_pair(vertex,nextIndex[material]++) );
-				vertexIndex[j] = nextIndex[material]++;// - 1;
-			}
-	/*		else
-			{
-				vertexIndex[j] = iter->second;
-			}*/
+			vertex.index[0] = nextIndex[material]++;
+			vertexQuad[j] = vertex;
+			meshes[material]->m_vertices.push_back(vertex);
 			vertexId++;
 		}
 
 		// add triangle indices
-		meshes[material]->m_indices.push_back(vertexIndex[0]);
-		meshes[material]->m_indices.push_back(vertexIndex[1]);
-		meshes[material]->m_indices.push_back(vertexIndex[2]);
+		meshes[material]->m_indices.push_back(vertexQuad[0].index[0]);
+		meshes[material]->m_indices.push_back(vertexQuad[1].index[0]);
+		meshes[material]->m_indices.push_back(vertexQuad[2].index[0]);
 
 		// handle quads
 		if (polygonSize == 4)
 		{
-			meshes[material]->m_indices.push_back(vertexIndex[0]);
-			meshes[material]->m_indices.push_back(vertexIndex[2]);
-			meshes[material]->m_indices.push_back(vertexIndex[3]);
+			meshes[material]->m_indices.push_back(vertexQuad[3].index[0]);
+
+			vertexQuad[0].index[0] = nextIndex[material]++;
+			meshes[material]->m_vertices.push_back(vertexQuad[0]);
+			meshes[material]->m_indices.push_back(vertexQuad[0].index[0]);
+
+			vertexQuad[2].index[0] = nextIndex[material]++;
+			meshes[material]->m_vertices.push_back(vertexQuad[2]);
+			meshes[material]->m_indices.push_back(vertexQuad[2].index[0]);
 		}
 	}
 	
-	// always build tangents/binormals as long as we have texture coordinates (saves ticking the box in maya)
-	if ((vertexAttributes & FBXVertex::TEXCOORD1) != 0)
-		vertexAttributes |= FBXVertex::TANGENT|FBXVertex::BINORMAL;
+	for (int i = 0 ; i < materialCount ; ++i )
+		m_threads.push_back( new std::thread( optimiseMesh, meshes[i] ) );
 	
-	// reclalc because I don't trust maya!
-	if ((vertexAttributes & (FBXVertex::TANGENT|FBXVertex::BINORMAL)) != 0)
-	{
-		for ( j = 0 ; j < materialCount ; ++j )
-			calculateTangentsBinormals(meshes[j]->m_vertices,meshes[j]->m_indices);
-	}
-		
 	// set mesh names, vertex attributes, extract material and add to mesh map
 	for ( j = 0 ; j < materialCount ; ++j )
 	{
-		std::string name = fbxNode->GetName();
+		meshes[j]->m_name = fbxNode->GetName();
 
 		// append material name to mesh name
 		if (materialCount > 1)
-			name += fbxNode->GetMaterial(j)->GetName();	
-
-		if (strlen(fbxNode->GetName()) > 0)
-			strncpy(meshes[j]->m_name,name.c_str(),MAX_PATH-1);		
-
-		meshes[j]->m_vertexAttributes = vertexAttributes;
+			meshes[j]->m_name += fbxNode->GetMaterial(j)->GetName();	
 
 		meshes[j]->m_material = extractMaterial(fbxMesh,j);
-		
-		m_meshes[meshes[j]->m_name] = meshes[j];
+		m_meshes.push_back(meshes[j]);
 	}
-
-	FBXNode* node = nullptr;
-
+	
 	// if there is a single mesh return it, else make a new parent node and return that
 	if (materialCount > 1)
 	{
-		node = new FBXNode();
-
-		if (strlen(fbxNode->GetName()) > 0)
-			strncpy(node->m_name,fbxNode->GetName(),MAX_PATH-1);
-
+		FBXNode* node = (FBXNode*)a_aieNode;
+		node->m_name = fbxNode->GetName();
 		for ( j = 0 ; j < materialCount ; ++j )
 		{
 			node->m_children.push_back( meshes[j] );
 			meshes[j]->m_parent = node;
 		}
-	}
-	else
-	{
-		node = meshes[0];
 	}
 
 	delete[] skinClusters;
@@ -1143,9 +995,43 @@ void* FBXFile::extractMeshes(void* a_object)
 
 	delete[] meshes;
 	delete[] nextIndex;
-	delete[] vertexIndexMap;
-		
-	return node;
+}
+
+void FBXFile::optimiseMesh(FBXMeshNode* a_mesh)
+{
+	//sort the vertex array so all common verts are adjacent in the array
+	std::sort(a_mesh->m_vertices.begin(), a_mesh->m_vertices.end());
+
+	unsigned int forward_iter = 1;
+	int j = 0;
+
+	while ( forward_iter < a_mesh->m_vertices.size() )
+	{
+		if ( a_mesh->m_vertices[j] == a_mesh->m_vertices[forward_iter] )
+		{
+			// if the adjacent verts are equal make all the duplicate vert's indicies point at the first one in the vector
+			a_mesh->m_indices[a_mesh->m_vertices[forward_iter].index[0]] = j;
+			++forward_iter;
+		}
+		else
+		{
+			// if they aren't duplicates, update the index to point at the vert's post sort position in the vector
+			a_mesh->m_indices[a_mesh->m_vertices[j].index[0]] = j;
+			++j;
+			// then push the current forward iterator back
+			// not sure if checking if j != forward pointer would be faster here.
+			a_mesh->m_vertices[j] = a_mesh->m_vertices[forward_iter];
+			a_mesh->m_indices[a_mesh->m_vertices[forward_iter].index[0]] = j;
+			++forward_iter;
+		}
+	}
+	a_mesh->m_vertices.resize(j+1);
+
+	if ((a_mesh->m_vertexAttributes & FBXVertex::eTEXCOORD1) != 0)
+	{
+		a_mesh->m_vertexAttributes |= FBXVertex::eTANGENT|FBXVertex::eBINORMAL;
+		calculateTangentsBinormals(a_mesh->m_vertices,a_mesh->m_indices);
+	}
 }
 
 void FBXFile::extractLight(FBXLightNode* a_light, void* a_object)
@@ -1254,19 +1140,18 @@ FBXMaterial* FBXFile::extractMaterial(void* a_mesh, int a_materialIndex)
 	FbxNode* lNode = pGeometry->GetNode();
 	FbxSurfaceMaterial *lMaterial = lNode->GetMaterial(a_materialIndex);
 
-	char matName[MAX_PATH];
-	strncpy(matName,lMaterial->GetName(),MAX_PATH-1);
-
 	// check if material already loaded, else create new material
-	auto oIter = m_materials.find(matName);
+	m_materialMutex.lock();
+	auto oIter = m_materials.find( lMaterial->GetName() );
 	if (oIter != m_materials.end())
 	{
+		m_materialMutex.unlock();
 		return oIter->second;
 	}
 	else
 	{
 		FBXMaterial* material = new FBXMaterial;
-		memcpy(material->name,matName,MAX_PATH);
+		material->name = lMaterial->GetName();
 
 		// get the implementation to see if it's a hardware shader.
 		const FbxImplementation* lImplementation = GetImplementation(lMaterial, FBXSDK_IMPLEMENTATION_HLSL);
@@ -1339,16 +1224,6 @@ FBXMaterial* FBXFile::extractMaterial(void* a_mesh, int a_materialIndex)
 			printf("Unknown type of Material: %s\n", lMaterial->GetClassId().GetName());
 		}
 
-		// still not sure if I should bother with these
-			/*DisplayDouble("            Scale U: ", pTexture->GetScaleU());
-			DisplayDouble("            Scale V: ", pTexture->GetScaleV());
-			DisplayDouble("            Translation U: ", pTexture->GetTranslationU());
-			DisplayDouble("            Translation V: ", pTexture->GetTranslationV());
-			DisplayBool("            Swap UV: ", pTexture->GetSwapUV());
-			DisplayDouble("            Rotation U: ", pTexture->GetRotationU());
-			DisplayDouble("            Rotation V: ", pTexture->GetRotationV());
-			DisplayDouble("            Rotation W: ", pTexture->GetRotationW()); */  
-
 		unsigned int auiTextureLookup[] =
 		{
 			FbxLayerElement::eTextureDiffuse - FbxLayerElement::sTypeTextureStartIndex,
@@ -1386,35 +1261,21 @@ FBXMaterial* FBXFile::extractMaterial(void* a_mesh, int a_materialIndex)
 							szFilename = szLastForward + 1;
 						else if (szLastBackward != nullptr)
 							szFilename = szLastBackward + 1;
-
-						if (strlen(szFilename) >= MAX_PATH)
-						{
-							printf("Texture filename too long!: %s\n", szFilename);
-						}
-						else
-						{
-							strcpy(material->textureFilenames[i],szFilename);
-						}
-
+						
 						std::string fullPath = m_path + szFilename;
 
 						auto iter = m_textures.find(fullPath);
 						if (iter != m_textures.end())
 						{
-							material->textureIDs[i] = iter->second;
+							material->textures[i] = iter->second;
 						}
 						else
 						{
-							material->textureIDs[i] = SOIL_load_OGL_texture(fullPath.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID,
-								SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_TEXTURE_REPEATS);
-							if (material->textureIDs[i] > 0)
-							{
-								m_textures[ fullPath ] = material->textureIDs[i];
-							}
-							else
-							{
-								printf("Failed to load texture: %s\n", fullPath.c_str());
-							}
+							FBXTexture* texture = new FBXTexture();
+							texture->name = szFilename;
+							texture->path = fullPath;
+							material->textures[i] = texture;
+							m_textures[ fullPath ] = texture;
 						}
 					}
 				}   
@@ -1422,10 +1283,21 @@ FBXMaterial* FBXFile::extractMaterial(void* a_mesh, int a_materialIndex)
 		}
 
 		m_materials[material->name] = material;
+		m_materialMutex.unlock();
 		return material;
 	}
 
+	m_materialMutex.unlock();
 	return nullptr;
+}
+
+void FBXFile::initialiseOpenGLTextures()
+{
+	for (auto texture : m_textures)
+	{
+		texture.second->handle = SOIL_create_OGL_texture(texture.second->data, texture.second->width, texture.second->height, texture.second->channels, 
+			SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_TEXTURE_REPEATS);
+	}
 }
 
 void FBXFile::extractAnimation(void* a_scene)
@@ -1449,7 +1321,7 @@ void FBXFile::extractAnimation(void* a_scene)
 		FbxAnimStack* lAnimStack = fbxScene->GetSrcObject<FbxAnimStack>(i);
 
 		FBXAnimation* anim = new FBXAnimation();
-		strncpy(anim->m_name,lAnimStack->GetName(),MAX_PATH);
+		anim->m_name = lAnimStack->GetName();
 		
 		// get animated track bone indices and nodes, and calculate start/end frame
 		int nbAnimLayers = lAnimStack->GetMemberCount(FbxCriteria::ObjectType(FbxAnimLayer::ClassId));
@@ -1507,7 +1379,7 @@ void FBXFile::extractAnimationTrack(std::vector<int>& a_tracks, void* a_layer, v
 	FBXSkeleton* skeleton = m_skeletons[0];
 	for ( unsigned int i = 0 ; i < skeleton->m_boneCount ; ++i )
 	{
-		if (strncmp(skeleton->m_nodes[i]->m_name,fbxNode->GetName(),MAX_PATH) == 0)
+		if (skeleton->m_nodes[i]->m_name == fbxNode->GetName())
 		{
 			boneIndex = i;
 			break;
@@ -1667,18 +1539,14 @@ void FBXFile::extractSkeleton(FBXSkeleton* a_skeleton, void* a_scene)
 	FbxScene* fbxScene = (FbxScene*)a_scene;
 
 	int poseCount = fbxScene->GetPoseCount();
-
-	char name[MAX_PATH];
-
+	
 	for (int i = 0; i < poseCount; ++i)
 	{
 		FbxPose* lPose = fbxScene->GetPose(i);
 
 		for ( int j = 0 ; j < lPose->GetCount() ; ++j )
 		{
-			strncpy(name,lPose->GetNodeName(j).GetCurrentName(),MAX_PATH);
-
-			float scaleFactor = m_importAssistor->unitScale;//1.0f / (float)FbxSystemUnit::sPredefinedUnits[m_importAssistor->unitScale].GetScaleFactor();
+			float scaleFactor = m_importAssistor->unitScale;
 
 			FbxMatrix scale(scaleFactor,0,0,0,
 							0,scaleFactor,0,0,
@@ -1690,7 +1558,7 @@ void FBXFile::extractSkeleton(FBXSkeleton* a_skeleton, void* a_scene)
 
 			for ( unsigned int k = 0 ; k < a_skeleton->m_boneCount ; ++k )
 			{
-				if ( strcmp(name, a_skeleton->m_nodes[ k ]->m_name) == 0 )
+				if (a_skeleton->m_nodes[k]->m_name == lPose->GetNodeName(j).GetCurrentName())
 				{
 					FbxVector4 row0 = lBindMatrix.GetRow(0);
 					FbxVector4 row1 = lBindMatrix.GetRow(1);
@@ -1845,7 +1713,7 @@ void FBXFile::calculateTangentsBinormals(std::vector<FBXVertex>& a_vertices, con
 		const glm::vec3& n = a_vertices[a].normal.xyz();
 		const glm::vec3& t = tan1[a];
 
-		// Gram-Schmidt orthogonalize
+		// Gram-Schmidt orthogonalise
 		glm::vec3 p = t - n * glm::dot(n, t);
 		if ( glm::length2(p) != 0 )
 		{
@@ -1867,11 +1735,7 @@ unsigned int FBXFile::nodeCount(FBXNode* a_node)
 
 	unsigned int uiCount = 1;
 
-#if (_MSC_VER == 1600)
-	for each (auto n in a_node->m_children)
-#else
 	for (auto n : a_node->m_children)
-#endif
 		uiCount += nodeCount(n);
 
 	return uiCount;
@@ -1879,9 +1743,8 @@ unsigned int FBXFile::nodeCount(FBXNode* a_node)
 
 FBXMeshNode* FBXFile::getMeshByName(const char* a_name)
 {
-	auto oIter = m_meshes.find(a_name);
-	if (oIter != m_meshes.end())
-		return oIter->second;
+	for (auto mesh : m_meshes)
+		if (mesh->m_name == a_name) return mesh;
 	return nullptr;
 }
 
@@ -1909,6 +1772,14 @@ FBXMaterial* FBXFile::getMaterialByName(const char* a_name)
 	return nullptr;
 }
 
+FBXTexture* FBXFile::getTextureByName(const char* a_name)
+{
+	auto oIter = m_textures.find(a_name);
+	if (oIter != m_textures.end())
+		return oIter->second;
+	return nullptr;
+}
+
 FBXAnimation* FBXFile::getAnimationByName(const char* a_name)
 {
 	auto oIter = m_animations.find(a_name);
@@ -1917,87 +1788,59 @@ FBXAnimation* FBXFile::getAnimationByName(const char* a_name)
 	return nullptr;
 }
 
-FBXMeshNode* FBXFile::getMeshByIndex(unsigned int a_index)
-{
-	FBXMeshNode* mesh = nullptr;
-	auto iter = m_meshes.begin();
-	unsigned int size = (unsigned int)m_meshes.size();
-
-	for ( unsigned int i = 0 ; i <= a_index && a_index < size ; ++i, ++iter )
-		mesh = iter->second; 
-
-	return mesh;
-}
-
 FBXLightNode* FBXFile::getLightByIndex(unsigned int a_index)
 {
-	FBXLightNode* light = nullptr;
-	auto iter = m_lights.begin();
-	unsigned int size = (unsigned int)m_lights.size();
-
-	for ( unsigned int i = 0 ; i <= a_index && a_index < size ; ++i, ++iter )
-		light = iter->second; 
-
-	return light;
-}
-
-FBXCameraNode* FBXFile::getCameraByIndex(unsigned int a_index)
-{
-	FBXCameraNode* camera = nullptr;
-	auto iter = m_cameras.begin();
-	unsigned int size = (unsigned int)m_cameras.size();
-
-	for ( unsigned int i = 0 ; i <= a_index && a_index < size ; ++i, ++iter )
-		camera = iter->second; 
-
-	return camera;
-}
-
-FBXMaterial* FBXFile::getMaterialByIndex(unsigned int a_index)
-{
-	FBXMaterial* material = nullptr;
-	auto iter = m_materials.begin();
-	unsigned int size = (unsigned int)m_materials.size();
-
-	for ( unsigned int i = 0 ; i <= a_index && a_index < size ; ++i, ++iter )
-		material = iter->second; 
-
-	return material;
-}
-
-FBXAnimation* FBXFile::getAnimationByIndex(unsigned int a_index)
-{
-	FBXAnimation* animation = nullptr;
-	auto iter = m_animations.begin();
-	unsigned int size = (unsigned int)m_animations.size();
-
-	for ( unsigned int i = 0 ; i <= a_index && a_index < size ; ++i, ++iter )
-		animation = iter->second; 
-
-	return animation;
-}
-
-unsigned int FBXFile::getTextureByName(const char* a_name)
-{
-	auto oIter = m_textures.find(a_name);
-	if (oIter != m_textures.end())
-		return oIter->second;
-	return 0;
-}
-
-unsigned int FBXFile::getTextureByIndex(unsigned int a_index)
-{
-#if (_MSC_VER == 1600)
-	for each (auto t in m_textures)
-#else
-	for (auto t : m_textures)
-#endif
+	for (auto t : m_lights)
 	{
 		if (a_index-- == 0)
 			return t.second;
 	}
 
-	return 0;
+	return nullptr;
+}
+
+FBXCameraNode* FBXFile::getCameraByIndex(unsigned int a_index)
+{
+	for (auto t : m_cameras)
+	{
+		if (a_index-- == 0)
+			return t.second;
+	}
+
+	return nullptr;
+}
+
+FBXMaterial* FBXFile::getMaterialByIndex(unsigned int a_index)
+{
+	for (auto t : m_materials)
+	{
+		if (a_index-- == 0)
+			return t.second;
+	}
+
+	return nullptr;
+}
+
+FBXAnimation* FBXFile::getAnimationByIndex(unsigned int a_index)
+{
+	for (auto t : m_animations)
+	{
+		if (a_index-- == 0)
+			return t.second;
+	}
+
+	return nullptr;
+}
+
+FBXTexture* FBXFile::getTextureByIndex(unsigned int a_index)
+{
+	for (auto t : m_textures)
+	{
+		if (a_index-- == 0)
+			return t.second;
+	}
+
+	return nullptr;
 }
 
 void FBXFile::gatherBones(void* a_object)
@@ -2008,10 +1851,7 @@ void FBXFile::gatherBones(void* a_object)
 		fbxNode->GetNodeAttribute()->GetAttributeType() == FbxNodeAttribute::eSkeleton)
 	{
 		unsigned int index = (unsigned int)m_importAssistor->boneIndexList.size();
-
-		char name[MAX_PATH];
-		strncpy(name,fbxNode->GetName(),MAX_PATH);
-		m_importAssistor->boneIndexList[ name ] = index;
+		m_importAssistor->boneIndexList[ fbxNode->GetName() ] = index;
 	}
 
 	for (int i = 0; i < fbxNode->GetChildCount(); i++)
@@ -2027,11 +1867,7 @@ void FBXNode::updateGlobalTransform()
 	else
 		m_globalTransform = m_localTransform;
 
-#if (_MSC_VER == 1600)
-	for each (auto child in m_children)
-#else
 	for (auto child : m_children)
-#endif
 		child->updateGlobalTransform();
 }
 
@@ -2044,18 +1880,20 @@ void FBXCameraNode::updateGlobalTransform()
 
 	m_viewMatrix = glm::inverse( m_globalTransform );
 
-#if (_MSC_VER == 1600)
-	for each (auto child in m_children)
-#else
 	for (auto child : m_children)
-#endif
 		child->updateGlobalTransform();
+}
+
+FBXTexture::~FBXTexture()
+{
+	delete[] data;
+	glDeleteTextures(1, &handle);
 }
 
 FBXAnimation* FBXAnimation::clone() const
 {
 	FBXAnimation* copy = new FBXAnimation();
-	strncpy(copy->m_name,m_name,MAX_PATH);
+	copy->m_name = m_name;
 	copy->m_startFrame = m_startFrame;
 	copy->m_endFrame = m_endFrame;
 	copy->m_trackCount = m_trackCount;

@@ -6,10 +6,8 @@
 #include <map>
 #include <vector>
 #include <string>
-
-#ifndef MAX_PATH
-	#define MAX_PATH 1024
-#endif
+#include <thread>
+#include <mutex>
 
 struct ImportAssistor;
 
@@ -20,15 +18,15 @@ public:
 
 	enum VertexAttributeFlags
 	{
-		POSITION	=	(1<<0),
-		COLOUR		=	(1<<1),
-		NORMAL		=	(1<<2),
-		TANGENT		=	(1<<3),
-		BINORMAL	=	(1<<4),
-		INDICES		=	(1<<5),
-		WEIGHTS		=	(1<<6),
-		TEXCOORD1	=	(1<<7),
-		TEXCOORD2	=	(1<<8),
+		ePOSITION	=	(1<<0),
+		eCOLOUR		=	(1<<1),
+		eNORMAL		=	(1<<2),
+		eTANGENT	=	(1<<3),
+		eBINORMAL	=	(1<<4),
+		eINDICES	=	(1<<5),
+		eWEIGHTS	=	(1<<6),
+		eTEXCOORD1	=	(1<<7),
+		eTEXCOORD2	=	(1<<8),
 	};
 
 	enum Offsets
@@ -59,6 +57,23 @@ public:
 
 	bool operator == (const FBXVertex& a_rhs) const;
 	bool operator < (const FBXVertex& a_rhs) const;
+
+	// internal use only!
+	unsigned int	index[4];
+};
+
+struct FBXTexture
+{
+	FBXTexture();
+	~FBXTexture();
+
+	std::string		name;
+	std::string		path;
+	unsigned int	handle;
+	unsigned char*	data;
+	int				width;
+	int				height;
+	int				channels;
 };
 
 // A simple FBX material that supports 8 texture channels
@@ -81,17 +96,16 @@ struct FBXMaterial
 	FBXMaterial();
 	~FBXMaterial();
 
-	char			name[MAX_PATH];
+	std::string		name;
 	glm::vec4		ambient;					// RGB + Ambient Factor stored in A
 	glm::vec4		diffuse;					// RGBA
 	glm::vec4		specular;					// RGB + Shininess/Gloss stored in A
 	glm::vec4		emissive;					// RGB + Emissive Factor stored in A
 
-	char			textureFilenames[TextureTypes_Count][MAX_PATH];		// Filename (not path!)
-	unsigned int	textureIDs[TextureTypes_Count];						// OpenGL texture handle
-	glm::vec2		textureOffsets[TextureTypes_Count];					// Texture coordinate offset
-	glm::vec2		textureTiling[TextureTypes_Count];					// Texture repeat count
-	float			textureRotation[TextureTypes_Count];				// Texture rotation around Z (2D rotation)
+	FBXTexture*		textures[TextureTypes_Count];
+	glm::vec2		textureOffsets[TextureTypes_Count];			// Texture coordinate offset
+	glm::vec2		textureTiling[TextureTypes_Count];			// Texture repeat count
+	float			textureRotation[TextureTypes_Count];		// Texture rotation around Z (2D rotation)
 };
 
 // Simple tree node with local/global transforms and children
@@ -117,7 +131,7 @@ public:
 	virtual void			updateGlobalTransform();
 
 	NodeType				m_nodeType;
-	char					m_name[MAX_PATH];
+	std::string				m_name;
 
 	glm::mat4				m_localTransform;
 	glm::mat4				m_globalTransform;
@@ -228,7 +242,7 @@ public:
 	unsigned int	totalFrames() const;
 	float			totalTime(float a_fps = 24.0f) const;
 
-	char			m_name[MAX_PATH];
+	std::string		m_name;
 	unsigned int	m_startFrame;
 	unsigned int	m_endFrame;
 	unsigned int	m_trackCount;
@@ -287,6 +301,9 @@ public:
 	bool			loadAnimationsOnly(const char* a_filename, UNIT_SCALE a_scale = FBXFile::UNITS_METER );
 	void			unload();
 
+	// goes through all loaded textures and creates their GL versions
+	void			initialiseOpenGLTextures();
+
 	// the folder path of the FBX file
 	// useful for accessing texture locations
 	const char*			getPath() const				{	return m_path.c_str();	}
@@ -310,22 +327,22 @@ public:
 	FBXCameraNode*	getCameraByName(const char* a_name);
 	FBXMaterial*	getMaterialByName(const char* a_name);
 	FBXAnimation*	getAnimationByName(const char* a_name);
-	unsigned int	getTextureByName(const char* a_name);
+	FBXTexture*		getTextureByName(const char* a_name);
 
 	// these methods are slow as the items are stored in a map
-	FBXMeshNode*	getMeshByIndex(unsigned int a_index);
+	FBXMeshNode*	getMeshByIndex(unsigned int a_index) const	{	return m_meshes[ a_index ];	}
 	FBXLightNode*	getLightByIndex(unsigned int a_index);
 	FBXCameraNode*	getCameraByIndex(unsigned int a_index);
 	FBXMaterial*	getMaterialByIndex(unsigned int a_index);
 	FBXSkeleton*	getSkeletonByIndex(unsigned int a_index)	{	return m_skeletons[a_index];	}
 	FBXAnimation*	getAnimationByIndex(unsigned int a_index);
-	unsigned int	getTextureByIndex(unsigned int a_index);
+	FBXTexture*		getTextureByIndex(unsigned int a_index);
 
 private:
 
 	void	extractObject(FBXNode* a_parent, void* a_object);
 
-	void*	extractMeshes(void* a_object);
+	void	extractMeshes(void* a_object, void* a_aieNode);
 	void	extractLight(FBXLightNode* a_light, void* a_object);
 	void	extractCamera(FBXCameraNode* a_camera, void* a_object);
 
@@ -337,7 +354,8 @@ private:
 		
 	FBXMaterial*	extractMaterial(void* a_mesh, int a_materialIndex);
 
-	void			calculateTangentsBinormals(std::vector<FBXVertex>& a_vertices, const std::vector<unsigned int>& a_indices);
+	static void		optimiseMesh(FBXMeshNode* a_mesh);
+	static void		calculateTangentsBinormals(std::vector<FBXVertex>& a_vertices, const std::vector<unsigned int>& a_indices);
 
 	unsigned int	nodeCount(FBXNode* a_node);
 
@@ -348,16 +366,24 @@ private:
 	std::string								m_path;
 
 	glm::vec4								m_ambientLight;
-	std::map<std::string,FBXMeshNode*>		m_meshes;
+	std::vector<FBXMeshNode*>				m_meshes;
 	std::map<std::string,FBXLightNode*>		m_lights;
 	std::map<std::string,FBXCameraNode*>	m_cameras;
 	std::map<std::string,FBXMaterial*>		m_materials;
-	std::map<std::string,unsigned int>		m_textures;
+	std::map<std::string,FBXTexture*>		m_textures;
 
 	std::vector<FBXSkeleton*>				m_skeletons;
 	std::map<std::string,FBXAnimation*>		m_animations;
 
 	ImportAssistor*							m_importAssistor;
+
+	// threads used during loading
+	std::vector<std::thread*>				m_threads;
+	std::mutex								m_textureMutex;
+	std::mutex								m_materialMutex;
+	std::mutex								m_meshesMutex;
+
+	std::mutex m_testMutex;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -390,15 +416,23 @@ inline bool FBXVertex::operator < (const FBXVertex& a_rhs) const
 	return memcmp(this,&a_rhs,sizeof(FBXVertex)) < 0;
 }
 
+inline FBXTexture::FBXTexture()
+	: data(nullptr),
+	handle(0),
+	width(0),
+	height(0),
+	channels(0)
+{
+
+}
+
 inline FBXMaterial::FBXMaterial() 
 	: ambient(0,0,0,0),
 	diffuse(1,1,1,1), 
 	specular(1,1,1,1), 
 	emissive(0,0,0,0)
 {
-	memset(name,0,MAX_PATH);
-	memset(textureFilenames,0,TextureTypes_Count*MAX_PATH);
-	memset(textureIDs,0,TextureTypes_Count * sizeof(unsigned int));
+	memset(textures,0,TextureTypes_Count * sizeof(FBXTexture*));
 	memset(textureOffsets,0,TextureTypes_Count * sizeof(glm::vec2));
 	memset(textureTiling,0,TextureTypes_Count * sizeof(glm::vec2));
 	memset(textureRotation,0,TextureTypes_Count * sizeof(float));
@@ -416,16 +450,12 @@ inline FBXNode::FBXNode()
 	m_parent(nullptr), 
 	m_userData(nullptr)
 { 
-	m_name[0] = 0;
+
 }
 
 inline FBXNode::~FBXNode()
 {
-#if (_MSC_VER == 1600)
-	for each (auto n in m_children) 
-#else
 	for (auto n : m_children) 
-#endif
 		delete n;
 }
 
