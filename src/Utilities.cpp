@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <glm/ext.hpp>
 
-#include <SOIL.h>
-
 #include "Utilities.h"
 
 double Utility::sm_prevTime = 0;

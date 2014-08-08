@@ -73,7 +73,7 @@ struct FBXTexture
 	unsigned char*	data;
 	int				width;
 	int				height;
-	int				channels;
+	int				format;
 };
 
 // A simple FBX material that supports 8 texture channels
@@ -421,7 +421,7 @@ inline FBXTexture::FBXTexture()
 	handle(0),
 	width(0),
 	height(0),
-	channels(0)
+	format(0)
 {
 
 }

@@ -7,7 +7,9 @@
 #define GLEW_NO_GLU
 #include <GL/glew.h>
 
-#include <SOIL.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/transform.hpp>
@@ -253,7 +255,9 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	// load textures!
 	for (auto texture : m_textures)
 		m_threads.push_back( new std::thread( [](FBXTexture* t){
-			t->data = SOIL_load_image(t->path.c_str(), &t->width, &t->height, &t->channels, SOIL_LOAD_AUTO);
+
+		t->data = stbi_load(t->path.c_str(), &t->width, &t->height, &t->format, STBI_default);
+		//	t->data = SOIL_load_image(t->path.c_str(), &t->width, &t->height, &t->channels, SOIL_LOAD_AUTO);
 			if (t->data == nullptr)
 			{
 				printf("Failed to load texture: %s\n", t->path.c_str());
@@ -263,6 +267,8 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 	for (auto t : m_threads)
 		t->join();
 	m_threads.clear();
+
+
 
 	return true;
 }
@@ -1295,8 +1301,23 @@ void FBXFile::initialiseOpenGLTextures()
 {
 	for (auto texture : m_textures)
 	{
-		texture.second->handle = SOIL_create_OGL_texture(texture.second->data, texture.second->width, texture.second->height, texture.second->channels, 
-			SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_TEXTURE_REPEATS);
+	//	texture.second->handle = SOIL_create_OGL_texture(texture.second->data, texture.second->width, texture.second->height, texture.second->channels, 
+	//		SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_TEXTURE_REPEATS);
+		switch (texture.second->format)
+		{
+		case STBI_grey: texture.second->format = GL_LUMINANCE; break;
+		case STBI_grey_alpha: texture.second->format = GL_LUMINANCE_ALPHA; break;
+		case STBI_rgb: texture.second->format = GL_RGB; break;
+		case STBI_rgb_alpha: texture.second->format = GL_RGBA; break;
+		};
+
+		glGenTextures(1, &texture.second->handle);
+		glBindTexture(GL_TEXTURE_2D, texture.second->handle);
+		glTexImage2D(GL_TEXTURE_2D, 0, texture.second->format, texture.second->width, texture.second->height, 0, texture.second->format, GL_UNSIGNED_BYTE, texture.second->data);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 }
 
