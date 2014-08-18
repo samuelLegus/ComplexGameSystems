@@ -1,7 +1,7 @@
 AIEFramework
 ============
 
-The AIE C++ OpenGL Framework, used by Advanced Diploma and Degree students.
+The AIE C++ OpenGL Framework, used by Advanced Diploma and Degree students. This repo is in constant flux and improvement. Differences may exist between this code-base and class tutorials.
 
 Purpose:
 
@@ -22,6 +22,13 @@ Dependencies:
   - GLM (for mathematics)
   - STB (for simple image loading)
   - FBX SDK 2015.1 (for the optional FBXLoader library for loading FBX models)
+ 
+Setup:
+
+  - Pull the entire repo to your local machine.
+  - Use cmake on the GLFW dependency and build it in debug and release.
+  - Install the FBX SDK 2015.1 (VS2013 edition if using VS2013).
+  - You may need to tweak the environment variable for the FBX SDK directory.
 
 Visual Studio Project Template:
 
