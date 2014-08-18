@@ -22,3 +22,14 @@ Dependencies:
   - GLM (for mathematics)
   - STB (for simple image loading)
   - FBX SDK 2015.1 (for the optional FBXLoader library for loading FBX models)
+
+Visual Studio Project Template:
+
+  Within the /tools/ folder there are zip files that contain project templates for Visual Studio 2012/13.
+  
+  These should be placed within the Visual Studio folder located within your user Documents folder.
+  
+  i.e. for Visual Studio 2013 on a typical install:
+    C:\Users\<username>\Documents\Visual Studio 2013\Templates\ProjectTemplates\Visual C++ Project\
+    
+  With the project templates you are able to add a new pre-made project to the AIE framework by simply opening the AIE solution and selecting "Add Project" and choosing the AIEApplication project type.
