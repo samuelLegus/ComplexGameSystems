@@ -297,7 +297,7 @@ public:
 	};
 
 	// must unload a scene before loading a new one over top
-	bool			load(const char* a_filename, UNIT_SCALE a_scale = FBXFile::UNITS_METER, bool a_loadTextures = true, bool a_loadAnimations = true);
+	bool			load(const char* a_filename, UNIT_SCALE a_scale = FBXFile::UNITS_METER, bool a_loadTextures = true, bool a_loadAnimations = true, bool a_flipTextureY = true);
 	bool			loadAnimationsOnly(const char* a_filename, UNIT_SCALE a_scale = FBXFile::UNITS_METER );
 	void			unload();
 

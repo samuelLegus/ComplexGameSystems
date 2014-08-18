@@ -29,6 +29,7 @@ struct ImportAssistor
 	bool					loadAnimations;
 	bool					loadAnimationOnly;
 	float					unitScale;
+	bool					flipTextureY;
 
 	std::map<std::string,int> boneIndexList;
 };
@@ -56,7 +57,8 @@ void FBXFile::unload()
 	m_textures.clear();
 }
 
-bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNITS_METER */, bool a_loadTextures /* = true */, bool a_loadAnimations /* = true */ )
+bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNITS_METER */, 
+	bool a_loadTextures /* = true */, bool a_loadAnimations /* = true */, bool a_flipTextureY /*= true*/)
 {
 	if (m_root != nullptr)
 	{
@@ -176,6 +178,7 @@ bool FBXFile::load(const char* a_filename, UNIT_SCALE a_scale /* = FBXFile::UNIT
 		m_importAssistor->loadTextures = a_loadTextures;
 		m_importAssistor->loadAnimations = a_loadAnimations;
 		m_importAssistor->unitScale = unitScale;
+		m_importAssistor->flipTextureY = a_flipTextureY;
 
 		m_root = new FBXNode();
 		m_root->m_name = "root";
@@ -725,7 +728,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 							vertex.texCoord1.x = (float)uv[0];
-							vertex.texCoord1.y = (float)uv[1];
+							if (m_importAssistor->flipTextureY == true)
+								vertex.texCoord1.y = 1.0f - (float)uv[1];
+							else
+								vertex.texCoord1.y = (float)uv[1];
 						}
 						break;
 					case FbxGeometryElement::eIndexToDirect:
@@ -735,7 +741,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 							vertex.texCoord1.x = (float)uv[0];
-							vertex.texCoord1.y = (float)uv[1];
+							if (m_importAssistor->flipTextureY == true)
+								vertex.texCoord1.y = 1.0f - (float)uv[1];
+							else
+								vertex.texCoord1.y = (float)uv[1];
 						}
 						break;
 					default:
@@ -755,7 +764,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 								meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD1;
 
 								vertex.texCoord1.x = (float)uv[0];
-								vertex.texCoord1.y = (float)uv[1];
+								if (m_importAssistor->flipTextureY == true)
+									vertex.texCoord1.y = 1.0f - (float)uv[1];
+								else
+									vertex.texCoord1.y = (float)uv[1];
 							}								
 							break;
 						default:
@@ -786,7 +798,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 							vertex.texCoord2.x = (float)uv[0];
-							vertex.texCoord2.y = (float)uv[1];
+							if (m_importAssistor->flipTextureY == true)
+								vertex.texCoord2.y = 1.0f - (float)uv[1];
+							else
+								vertex.texCoord2.y = (float)uv[1];
 						}
 						break;
 					case FbxGeometryElement::eIndexToDirect:
@@ -796,7 +811,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 							meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 							vertex.texCoord2.x = (float)uv[0];
-							vertex.texCoord2.y = (float)uv[1];
+							if (m_importAssistor->flipTextureY == true)
+								vertex.texCoord2.y = 1.0f - (float)uv[1];
+							else
+								vertex.texCoord2.y = (float)uv[1];
 						}
 						break;
 					default:
@@ -816,7 +834,10 @@ void FBXFile::extractMeshes(void* a_object, void* a_aieNode)
 								meshes[material]->m_vertexAttributes |= FBXVertex::eTEXCOORD2;
 
 								vertex.texCoord2.x = (float)uv[0];
-								vertex.texCoord2.y = (float)uv[1];
+								if (m_importAssistor->flipTextureY == true)
+									vertex.texCoord2.y = 1.0f - (float)uv[1];
+								else
+									vertex.texCoord2.y = (float)uv[1];
 							}								
 							break;
 						default:
