@@ -7,6 +7,7 @@
 [submodule "dep/glew"]
 	path = dep/glew
 	url = https://github.com/nigels-com/glew
+	ignore = dirty
 [submodule "dep/stb"]
 	path = dep/stb
 	url = https://github.com/nothings/stb.git
