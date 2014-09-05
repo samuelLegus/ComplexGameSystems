@@ -24,10 +24,10 @@ The AIE C++ OpenGL Framework, used by Advanced Diploma and Degree students. This
 
 ## Quick Setup
 
-    1. Clone the repository to your workstation.
-    2. Clone the submodules and build them where applicable.
-    3. Configure the FBXLoader project's Environment Variables property sheet to point to the location of the FBX SDK on your workstation.
-    4. Build the AIEFramework solution.
+1. Clone the repository to your workstation.
+2. Clone the submodules and build them where applicable.
+3. Configure the FBXLoader project's Environment Variables property sheet to point to the location of the FBX SDK on your workstation.
+4. Build the AIEFramework solution.
 
 For more information or help, see the Github wiki.
 
