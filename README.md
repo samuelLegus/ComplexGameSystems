@@ -24,20 +24,14 @@ The AIE C++ OpenGL Framework, used by Advanced Diploma and Degree students. This
 
 ## Quick Setup
 
+For more in-depth directions, check the repository wiki.
+
 1. Clone the repository to your workstation.
-2. Clone the submodules and build them where applicable.
+2. Initialize and clone the submodules. Build the GLEW and GLFW solutions.
 3. Configure the FBXLoader project's Environment Variables property sheet to point to the location of the FBX SDK on your workstation.
 4. Build the AIEFramework solution.
+5. If using Visual Studio, copy the templates to your Visual Studio templates directory. 
 
-For more information or help, see the Github wiki.
+## Contributions
 
-### Visual Studio Project Template
-
-Within the /tools/ folder there are zip files that contain project templates for Visual Studio 2012/13.
-
-These should be placed within the Visual Studio folder located within your user Documents folder.
-
-i.e. for Visual Studio 2013 on a typical install:
-C:\Users\<username>\Documents\Visual Studio 2013\Templates\ProjectTemplates\Visual C++ Project\
-
-With the project templates you are able to add a new pre-made project to the AIE framework by simply opening the AIE solution and selecting "Add Project" and choosing the AIEApplication project type.
+Please fork, commit, rebase, and then make a pull request!
